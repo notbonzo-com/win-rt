@@ -2,11 +2,12 @@
 #include <windows.h>
 #include <winfnc.h>
 
-UNICODE_STRING LdrApiDefaultExtension = {
-    sizeof(L".dll"),
-    sizeof(L".dll"),
-    L".dll"
-};
+UNICODE_STRING LdrApiDefaultExtension = DECLARE_UNICODE_STRING( L".dll" );
+// UNICODE_STRING LdrApiDefaultExtension = {
+//     sizeof(L".dll"),
+//     sizeof(L".dll"),
+//     L".dll"
+// };
 
 NTSTATUS NTAPI LdrpMapDll( _In_ PWSTR SearchPath, _In_ PWSTR DllPath2, _In_ PWSTR DllName, _In_ PULONG DllCharacteristics, _In_ BOOLEAN Static, _In_ BOOLEAN Redirect, _Out_ PLDR_DATA_TABLE_ENTRY* DataTableEntry )
 {
