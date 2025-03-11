@@ -175,6 +175,13 @@ typedef struct _UNICODE_STRING {
     WCHAR* Buffer;
 } UNICODE_STRING, *PUNICODE_STRING;
 
+#define DECLARE_UNICODE_STRING(_str) \
+( UNICODE_STRING ) {\
+    .Length = sizeof(_str) - sizeof(WCHAR), \
+    .MaximumLength = sizeof(_str), \
+    .Buffer = (PWCH)_str \
+}
+
 typedef struct _OBJECT_ATTRIBUTES {
     ULONG Length;
     HANDLE RootDirectory;
