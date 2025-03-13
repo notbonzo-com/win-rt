@@ -33,4 +33,14 @@ __WCHAR_TYPE__ *wcsrchr(const __WCHAR_TYPE__ *s, __WCHAR_TYPE__ c);
 size_t wcscspn(const __WCHAR_TYPE__ *s, const __WCHAR_TYPE__ *reject);
 __WCHAR_TYPE__ *wcsstr(const __WCHAR_TYPE__ *haystack, const __WCHAR_TYPE__ *needle);
 
+int stricmp(const char *s1, const char *s2);
+int strnicmp(const char *s1, const char *s2, size_t n);
+int wcsicmp(const __WCHAR_TYPE__ *s1, const __WCHAR_TYPE__ *s2);
+int wcsnicmp(const __WCHAR_TYPE__ *s1, const __WCHAR_TYPE__ *s2, size_t n);
+
+int tolower(int c);
+int toupper(int c);
+__WCHAR_TYPE__ towlower(__WCHAR_TYPE__ c);
+__WCHAR_TYPE__ towupper(__WCHAR_TYPE__ c);
+
 #endif

@@ -1,7 +1,7 @@
 #include <bootstrap/core.h>
 #include <hash/ntdll.h>
 #include <windows.h>
-#include <winfnc.h>
+#include <winifnc.h>
 
 typedef LONG (WINAPI *CSpecificHandler_t)(
     struct _EXCEPTION_RECORD *ExceptionRecord,
@@ -26,7 +26,7 @@ LONG WINAPI __C_specific_handler(
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
-    C_specific_handler = (CSpecificHandler_t)__bootstrap_get_export(ntdll_module, CSPECIFICHANDLER_HASH);
+    C_specific_handler = (CSpecificHandler_t)__bootstrap_get_export(ntdll_module, __C_specific_handler_HASH);
     
     if (!C_specific_handler) {
         return EXCEPTION_CONTINUE_SEARCH;

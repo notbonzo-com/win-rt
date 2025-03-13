@@ -1,6 +1,6 @@
 #include <bootstrap/core.h>
 #include <windows.h>
-#include <winfnc.h>
+#include <winifnc.h>
 
 PLDR_DATA_TABLE_ENTRY __bootstrap_find_module(unsigned long long target_hash) {
     PPEB pPeb = NtCurrentPeb();

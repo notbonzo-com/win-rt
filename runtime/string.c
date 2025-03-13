@@ -250,3 +250,70 @@ __WCHAR_TYPE__ *wcsstr(const __WCHAR_TYPE__ *haystack, const __WCHAR_TYPE__ *nee
     }
     return 0;
 }
+
+int stricmp(const char *s1, const char *s2) {
+    while (*s1 && *s2) {
+        unsigned char c1 = (unsigned char)tolower(*s1);
+        unsigned char c2 = (unsigned char)tolower(*s2);
+        if (c1 != c2) return c1 - c2;
+        s1++;
+        s2++;
+    }
+    return (unsigned char)tolower(*s1) - (unsigned char)tolower(*s2);
+}
+
+int strnicmp(const char *s1, const char *s2, size_t n) {
+    while (n && *s1 && *s2) {
+        unsigned char c1 = (unsigned char)tolower(*s1);
+        unsigned char c2 = (unsigned char)tolower(*s2);
+        if (c1 != c2) return c1 - c2;
+        s1++;
+        s2++;
+        n--;
+    }
+    if (n == 0) return 0;
+    return (unsigned char)tolower(*s1) - (unsigned char)tolower(*s2);
+}
+
+int wcsicmp(const __WCHAR_TYPE__ *s1, const __WCHAR_TYPE__ *s2) {
+    while (*s1 && *s2) {
+        __WCHAR_TYPE__ c1 = (*s1 >= L'A' && *s1 <= L'Z') ? *s1 + 32 : *s1;
+        __WCHAR_TYPE__ c2 = (*s2 >= L'A' && *s2 <= L'Z') ? *s2 + 32 : *s2;
+        if (c1 != c2) return c1 - c2;
+        s1++;
+        s2++;
+    }
+    return ((*s1 >= L'A' && *s1 <= L'Z') ? *s1 + 32 : *s1) -
+           ((*s2 >= L'A' && *s2 <= L'Z') ? *s2 + 32 : *s2);
+}
+
+int wcsnicmp(const __WCHAR_TYPE__ *s1, const __WCHAR_TYPE__ *s2, size_t n) {
+    while (n && *s1 && *s2) {
+        __WCHAR_TYPE__ c1 = (*s1 >= L'A' && *s1 <= L'Z') ? *s1 + 32 : *s1;
+        __WCHAR_TYPE__ c2 = (*s2 >= L'A' && *s2 <= L'Z') ? *s2 + 32 : *s2;
+        if (c1 != c2) return c1 - c2;
+        s1++;
+        s2++;
+        n--;
+    }
+    if (n == 0) return 0;
+    return ((*s1 >= L'A' && *s1 <= L'Z') ? *s1 + 32 : *s1) -
+           ((*s2 >= L'A' && *s2 <= L'Z') ? *s2 + 32 : *s2);
+}
+
+int tolower(int c) {
+    if (c >= 'A' && c <= 'Z') return c + 32;
+    return c;
+}
+int toupper(int c) {
+    if (c >= 'a' && c <= 'z') return c - 32;
+    return c;
+}
+__WCHAR_TYPE__ towlower(__WCHAR_TYPE__ c) {
+    if (c >= L'A' && c <= L'Z') return c + 32;
+    return c;
+}
+__WCHAR_TYPE__ towupper(__WCHAR_TYPE__ c) {
+    if (c >= L'a' && c <= L'z') return c - 32;
+    return c;
+}

@@ -17,9 +17,6 @@ unsigned long long __bootstrap_fnv1a_whash(const __WCHAR_TYPE__ *s);
 PLDR_DATA_TABLE_ENTRY __bootstrap_find_module(unsigned long long target_hash);
 PVOID __bootstrap_get_export(PLDR_DATA_TABLE_ENTRY module, unsigned long long target_hash);
 
-void __bootstrap_print(const char* msg);
-bool __bootstrap_init();
-
 #ifdef __cplusplus
 }
 #endif

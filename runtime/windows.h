@@ -9,13 +9,20 @@ struct _KUSER_SHARED_DATA;
 
 #define USER_SHARED_DATA ((struct _KUSER_SHARED_DATA * const)0x7ffe0000)
 #define CONTAINING_RECORD(address, type, field) ((type *)((char *)(address) - __builtin_offsetof(type, field)))
+#define PtrToUlong(u) ((ULONG)(ULONGLONG)((PVOID)(u)))
+#define HIWORD(l) ((WORD)(((ULONGLONG)(l)>>16)&0xFFFF))
+#define LDR_IS_DATAFILE(handle) (((ULONG_PTR)(handle)) & (ULONG_PTR)1)
+#define FIELD_OFFSET(Type, Field) ((LONG)__builtin_offsetof(Type, Field))
+#define IMAGE_FIRST_SECTION( NtHeader ) ((IMAGE_SECTION_HEADER*) ((ULONG_PTR)(NtHeader) + FIELD_OFFSET( IMAGE_NT_HEADERS, OptionalHeader ) + ((NtHeader))->FileHeader.SizeOfOptionalHeader))
+#define RTL_CONSTANT_STRING(s) { sizeof(s) - sizeof((s)[0]), sizeof(s), s }
+#define RTL_NUMBER_OF(x) (sizeof(x) / sizeof(x[0]))
+#define RTL_FIELD_SIZE(type,field) (sizeof(((type *)0)->field))
+#define RTL_SIZEOF_THROUGH_FIELD(type,field) (FIELD_OFFSET(type, field) + RTL_FIELD_SIZE(type, field))
 
 #define __forceinline extern __inline__ __attribute__((__always_inline__,__gnu_inline__))
 
 #define WINAPI __stdcall
 #define NTAPI __stdcall
-
-#define NT_SUCCESS(Status) ((NTSTATUS)(Status) != 0)
 
 #ifdef _WIN64
     __forceinline struct _PEB* NtCurrentPeb() {
@@ -25,7 +32,7 @@ struct _KUSER_SHARED_DATA;
     }
     __forceinline struct _TEB* NtCurrentTeb() {
         struct _TEB* teb;
-        __asm__("movq %%gs:0, %0" : "=r"(teb));
+        __asm__("movq %%gs:0x30, %0" : "=r"(teb));
         return teb;
     }
 #elif defined(_M_IX86)
@@ -74,7 +81,8 @@ typedef WCHAR*                  LPWSTR;
 typedef const WCHAR*            LPCWSTR;
 typedef WCHAR*                  PWCHAR;
 typedef WCHAR*                  PWSTR;
-typedef ULONG*                  ULONG_PTR;
+typedef ULONGLONG               ULONG_PTR;
+typedef LONG*                   LONG_PTR;
 typedef unsigned char*          PBOOLEAN;
 typedef const char*             PCSTR;
 typedef LONGLONG*               PLONGLONG;
@@ -85,6 +93,9 @@ typedef ULONGLONG*              PSIZE_T;
 typedef const __WCHAR_TYPE__*   PCWSTR;
 typedef const __WCHAR_TYPE__*   PCWCHAR;
 typedef __WCHAR_TYPE__*         PWCH;
+typedef const char*             PCSZ;
+typedef DWORD                   DWORD_PTR;
+typedef ULONGLONG*              PULONG_PTR;
 
 typedef unsigned char           BOOLEAN;
 
@@ -101,12 +112,31 @@ typedef HANDLE                  HGLOBAL;
 typedef HANDLE                  HRSRC;
 typedef HANDLE*                 PHANDLE;
 
+typedef int(* FARPROC) ();
+
+#define NT_SUCCESS(Status) ((NTSTATUS)(Status) != 0)
+#define NtCurrentProcess() 	   ( (HANDLE)(LONG_PTR)-1 )
+#define NtCurrentThread() 	   ( (HANDLE)(LONG_PTR)-2 )
+#define ZwCurrentProcess() 	   NtCurrentProcess()
+#define ZwCurrentThread() 	   NtCurrentThread()
+#ifndef InitializeObjectAttributes
+#define InitializeObjectAttributes( p, n, a, r, s ) { \
+    (p)->Length = sizeof(OBJECT_ATTRIBUTES); \
+    (p)->RootDirectory = r; \
+    (p)->Attributes = a; \
+    (p)->ObjectName = n; \
+    (p)->SecurityDescriptor = s; \
+    (p)->SecurityQualityOfService = nullptr; \
+}
+#endif
+
 #define _In_ 
 #define _Inout_
 #define _In_opt_
 #define _Out_
 #define GDI_BATCH_BUFFER_SIZE 310
 #define UNICODE_NULL L'\0'
+#define ANSI_NULL '\0'
 #define WIN32_CLIENT_INFO_LENGTH 62
 #define STATIC_UNICODE_BUFFER_LENGTH 261
 #define TLS_MINIMUM_AVAILABLE 64
@@ -124,6 +154,16 @@ typedef HANDLE*                 PHANDLE;
 #define EXCEPTION_EXECUTE_HANDLER    1
 #define EXCEPTION_CONTINUE_SEARCH    0
 #define EXCEPTION_CONTINUE_EXECUTION -1
+#define USHRT_MAX   0xffff
+#define MAXUSHORT   (ULONG_PTR)USHRT_MAX
+#define ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION 2
+
+#define DLL_PROCESS_ATTACH   1
+#define DLL_PROCESS_DETACH   0
+#define DLL_THREAD_ATTACH   2
+#define DLL_THREAD_DETACH   3
+
+#define LDRP_PROCESS_ATTACH_CALLED   0x00080000
 
 #define EXCEPTION_NONCONTINUABLE     0x1                    // The exception cannot be resumed
 #define EXCEPTION_UNWINDING          0x2                    // Unwinding stack
@@ -156,13 +196,106 @@ typedef HANDLE*                 PHANDLE;
 #define EXCEPTION_STACK_OVERFLOW            0xC00000FD      // Stack overflow
 
 #define IMAGE_FILE_EXECUTABLE_IMAGE   0x0002
+#define LDRP_IMAGE_DLL   0x00000004
+#define LDRP_COR_IMAGE   0x00400000
+#define LDRP_UPDATE_REFCOUNT   0x01 
+#define LDRP_UPDATE_DEREFCOUNT   0x02
+#define LDRP_LOAD_IN_PROGRESS   0x00001000
+#define LDRP_UNLOAD_IN_PROGRESS   0x00002000
+#define LDRP_UPDATE_PIN   0x03
+#define OBJ_CASE_INSENSITIVE   0x00000040L
+
+#define GENERIC_ALL 0x10000000
+#define GENERIC_EXECUTE 0x20000000
+#define GENERIC_WRITE 0x40000000
+#define GENERIC_READ 0x80000000
+
+#define FILE_SHARE_DELETE 0x00000004
+#define FILE_SHARE_READ 0x00000001
+#define FILE_SHARE_WRITE 0x00000002
+
+#define SECTION_MAP_READ   4
+#define SECTION_MAP_EXECUTE   0x0008
+#define SECTION_MAP_WRITE   0x0002
+
+#define PAGE_READONLY   0x0002
+#define PAGE_READWRITE   0x04
+#define PAGE_EXECUTE   0x10
+
+#define SEC_COMMIT   0x8000000
+#define IMAGE_FILE_DLL   0x2000
+
+#define REG_DWORD   4
+#define REG_QWORD   11
+#define REG_SZ   1
+
+#define TAG_USTR   'RTSU'
+#define OBJ_NAME_PATH_SEPARATOR   ((WCHAR)L'\\')
+#define RTL_DOS_APPLY_FILE_REDIRECTION_USTR_FLAG_RESPECT_DOT_LOCAL 1
+#define LDRP_ENTRY_PROCESSED   0x00004000
+
+#define SYNCHRONIZE   (0x00100000L)
+#define FILE_EXECUTE   ( 0x0020 )
+#define FILE_NON_DIRECTORY_FILE   0x00000040
+#define FILE_SYNCHRONOUS_IO_NONALERT   0x00000020
 
 #define STATUS_NAME_TOO_LONG   ((NTSTATUS)0xC0000106)
 #define STATUS_BUFFER_OVERFLOW ((NTSTATUS)0x80000005)
+#define STATUS_INVALID_PARAMETER   ((NTSTATUS)0xC000000DL)
+#define STATUS_OBJECT_PATH_SYNTAX_BAD   ((NTSTATUS)0xC000003B)
+#define STATUS_INVALID_IMAGE_FORMAT   ((NTSTATUS)0xC000007B)
+#define STATUS_NO_MEMORY   ((NTSTATUS)(0xC0000017L))
+#define STATUS_ORDINAL_NOT_FOUND   ((NTSTATUS)0xC0000138)
+#define STATUS_ENTRYPOINT_NOT_FOUND   ((NTSTATUS)0xC0000139)
+#define STATUS_DLL_NOT_FOUND   ((NTSTATUS)0xC0000135)
+#define STATUS_PROCEDURE_NOT_FOUND   ((NTSTATUS)0xC000007A)
+#define STATUS_SXS_KEY_NOT_FOUND   ((NTSTATUS)0xC0150008)
+#define STATUS_ACCESS_VIOLATION   ((NTSTATUS)0xC0000005)
+#define STATUS_DLL_INIT_FAILED   ((NTSTATUS)0xC0000142)
+#define STATUS_SHARING_VIOLATION   ((NTSTATUS)0xC0000043L)
+#define STATUS_ACCESS_DENIED   ((NTSTATUS)0xC0000022L)
+#define STATUS_SXS_SECTION_NOT_FOUND ((NTSTATUS)0xC0150006)
+#define STATUS_OBJECT_NAME_NOT_FOUND   ((NTSTATUS)0xC0000034L)
+
+#define RTL_IMAGE_NT_HEADER_EX_FLAG_NO_RANGE_CHECK   0x00000001
 
 #define NTSYSAPI __declspec(dllimport)
 
 #define MAXIMUM_LEADBYTES 12
+#define DEFAULT_SECURITY_COOKIE   0xBB40E64E
+#define IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG   10
+#define UNICODE_STRING_MAX_BYTES   ((USHORT) 65534)
+
+#define _WIN32_WINNT_VISTA   0x0600
+#define _WIN32_WINNT_WIN10   0x0A00
+#define _WIN32_WINNT_WIN2K   0x0500
+#define _WIN32_WINNT_WIN6   0x0600
+#define _WIN32_WINNT_WIN7   0x0601
+#define _WIN32_WINNT_WIN8   0x0602
+#define _WIN32_WINNT_WINBLUE   0x0603
+
+#define APISET_WIN7   (1 << 0)
+#define APISET_WIN8   (1 << 1)
+#define APISET_WIN81   (1 << 2)
+#define APISET_WIN10   (1 << 3)
+
+#ifdef _PPC_
+#define SWAPD(x) ((((x)&0xff)<<24)|(((x)&0xff00)<<8)|(((x)>>8)&0xff00)|(((x)>>24)&0xff))
+#define SWAPW(x) ((((x)&0xff)<<8)|(((x)>>8)&0xff))
+#else
+#define SWAPD(x) x
+#define SWAPW(x) x
+#endif
+#define SD(Object,Field) Object->Field = SWAPD(Object->Field)
+#define SW(Object,Field) Object->Field = SWAPW(Object->Field)
+
+#define IMAGE_ORDINAL_FLAG64 0x8000000000000000ULL
+#define IMAGE_ORDINAL_FLAG32 0x80000000
+
+typedef enum _SECTION_INHERIT {
+    ViewShare = 1,
+    ViewUnmap = 2
+} SECTION_INHERIT;
 
 typedef struct _LIST_ENTRY {
     struct _LIST_ENTRY *Flink;
@@ -756,6 +889,93 @@ typedef struct _RTL_USER_PROCESS_PARAMETERS
     ULONG HeapMemoryTypeMask; // WIN11
 } RTL_USER_PROCESS_PARAMETERS, *PRTL_USER_PROCESS_PARAMETERS;
 
+typedef struct {
+    ULONG Size;
+    ULONG TimeDateStamp;
+    USHORT MajorVersion;
+    USHORT MinorVersion;
+    ULONG GlobalFlagsClear;
+    ULONG GlobalFlagsSet;
+    ULONG CriticalSectionDefaultTimeout;
+    ULONG DeCommitFreeBlockThreshold;
+    ULONG DeCommitTotalFreeThreshold;
+    ULONG LockPrefixTable;
+    ULONG MaximumAllocationSize;
+    ULONG VirtualMemoryThreshold;
+    ULONG ProcessHeapFlags;
+    ULONG ProcessAffinityMask;
+    USHORT CSDVersion;
+    USHORT Reserved1;
+    ULONG EditList;
+    ULONG SecurityCookie;
+    ULONG SEHandlerTable;
+    ULONG SEHandlerCount;
+} IMAGE_LOAD_CONFIG_DIRECTORY32, *PIMAGE_LOAD_CONFIG_DIRECTORY32;
+
+typedef struct {
+    ULONG Size;
+    ULONG TimeDateStamp;
+    USHORT MajorVersion;
+    USHORT MinorVersion;
+    ULONG GlobalFlagsClear;
+    ULONG GlobalFlagsSet;
+    ULONG CriticalSectionDefaultTimeout;
+    ULONGLONG DeCommitFreeBlockThreshold;
+    ULONGLONG DeCommitTotalFreeThreshold;
+    ULONGLONG LockPrefixTable;
+    ULONGLONG MaximumAllocationSize;
+    ULONGLONG VirtualMemoryThreshold;
+    ULONGLONG ProcessAffinityMask;
+    ULONG ProcessHeapFlags;
+    USHORT CSDVersion;
+    USHORT Reserved1;
+    ULONGLONG EditList;
+    ULONGLONG SecurityCookie;
+    ULONGLONG SEHandlerTable;
+    ULONGLONG SEHandlerCount;
+} IMAGE_LOAD_CONFIG_DIRECTORY64, *PIMAGE_LOAD_CONFIG_DIRECTORY64;
+   
+#ifdef _WIN64
+typedef IMAGE_LOAD_CONFIG_DIRECTORY64     IMAGE_LOAD_CONFIG_DIRECTORY;
+typedef PIMAGE_LOAD_CONFIG_DIRECTORY64    PIMAGE_LOAD_CONFIG_DIRECTORY;
+#else
+typedef IMAGE_LOAD_CONFIG_DIRECTORY32     IMAGE_LOAD_CONFIG_DIRECTORY;
+typedef PIMAGE_LOAD_CONFIG_DIRECTORY32    PIMAGE_LOAD_CONFIG_DIRECTORY;
+#endif
+
+typedef struct _FILE_BASIC_INFORMATION {
+    LARGE_INTEGER CreationTime;
+    LARGE_INTEGER LastAccessTime;
+    LARGE_INTEGER LastWriteTime;
+    LARGE_INTEGER ChangeTime;
+    ULONG FileAttributes;
+} FILE_BASIC_INFORMATION, *PFILE_BASIC_INFORMATION;
+
+typedef struct _RTLP_CURDIR_REF
+{
+    LONG RefCount;
+    HANDLE Handle;
+} RTLP_CURDIR_REF, *PRTLP_CURDIR_REF;
+
+typedef struct _RTL_RELATIVE_NAME_U
+{
+    UNICODE_STRING RelativeName;
+    HANDLE ContainingDirectory;
+    PRTLP_CURDIR_REF CurDirRef;
+} RTL_RELATIVE_NAME_U, *PRTL_RELATIVE_NAME_U;
+
+typedef enum _RTL_PATH_TYPE
+{
+    RtlPathTypeUnknown,
+    RtlPathTypeUncAbsolute,
+    RtlPathTypeDriveAbsolute,
+    RtlPathTypeDriveRelative,
+    RtlPathTypeRooted,
+    RtlPathTypeRelative,
+    RtlPathTypeLocalDevice,
+    RtlPathTypeRootLocalDevice,
+} RTL_PATH_TYPE;
+
 typedef enum _PROCESSINFOCLASS
 {
     ProcessBasicInformation, // q: PROCESS_BASIC_INFORMATION, PROCESS_EXTENDED_BASIC_INFORMATION
@@ -1134,6 +1354,105 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemProcessorFeaturesBitMapInformation,
     MaxSystemInfoClass
 } SYSTEM_INFORMATION_CLASS;
+
+enum
+{
+    UNW_FLAG_NHANDLER  = 0x00,
+    UNW_FLAG_EHANDLER  = 0x01,
+    UNW_FLAG_UHANDLER  = 0x02,
+    UNW_FLAG_CHAININFO = 0x04
+};
+
+typedef enum _HARDERROR_RESPONSE_OPTION
+{
+    OptionAbortRetryIgnore,
+    OptionOk,
+    OptionOkCancel,
+    OptionRetryCancel,
+    OptionYesNo,
+    OptionYesNoCancel,
+    OptionShutdownSystem,
+    OptionOkNoWait,
+    OptionCancelTryContinue
+} HARDERROR_RESPONSE_OPTION, *PHARDERROR_RESPONSE_OPTION;
+
+typedef struct _IMAGE_IMPORT_BY_NAME
+{
+    WORD Hint;
+    BYTE Name[1];
+}
+IMAGE_IMPORT_BY_NAME, *PIMAGE_IMPORT_BY_NAME;
+
+typedef struct _IMAGE_THUNK_DATA64 {
+    union {
+        ULONGLONG ForwarderString;
+        ULONGLONG Function;
+        ULONGLONG Ordinal;
+        ULONGLONG AddressOfData;
+    } u1;
+} IMAGE_THUNK_DATA64, *PIMAGE_THUNK_DATA64;
+
+typedef struct _IMAGE_THUNK_DATA32 {
+    union {
+        ULONG ForwarderString;
+        ULONG Function;
+        ULONG Ordinal;
+        ULONG AddressOfData;
+    } u1;
+} IMAGE_THUNK_DATA32, *PIMAGE_THUNK_DATA32;
+
+typedef struct _IMAGE_TLS_DIRECTORY64 {
+    ULONGLONG StartAddressOfRawData;
+    ULONGLONG EndAddressOfRawData;
+    ULONGLONG AddressOfIndex;
+    ULONGLONG AddressOfCallBacks;
+    ULONG SizeOfZeroFill;
+    ULONG Characteristics;
+} IMAGE_TLS_DIRECTORY64, *PIMAGE_TLS_DIRECTORY64;
+   
+typedef struct _IMAGE_TLS_DIRECTORY32 {
+    ULONG StartAddressOfRawData;
+    ULONG EndAddressOfRawData;
+    ULONG AddressOfIndex;
+    ULONG AddressOfCallBacks;
+    ULONG SizeOfZeroFill;
+    ULONG Characteristics;
+} IMAGE_TLS_DIRECTORY32, *PIMAGE_TLS_DIRECTORY32;
+
+#define IMAGE_ORDINAL64(Ordinal) (Ordinal & 0xffff)
+#define IMAGE_ORDINAL32(Ordinal) (Ordinal & 0xffff)
+
+#define IMAGE_SNAP_BY_ORDINAL64(Ordinal) ((Ordinal & IMAGE_ORDINAL_FLAG64) != 0)
+#define IMAGE_SNAP_BY_ORDINAL32(Ordinal) ((Ordinal & IMAGE_ORDINAL_FLAG32) != 0)
+
+#define CONTEXT_i386    0x00010000
+#define CONTEXT_i486    0x00010000
+
+#define CONTEXT_CONTROL         (CONTEXT_i386 | 0x00000001L) // SS:SP, CS:IP, FLAGS, BP
+#define CONTEXT_INTEGER         (CONTEXT_i386 | 0x00000002L) // AX, BX, CX, DX, SI, DI
+#define CONTEXT_SEGMENTS        (CONTEXT_i386 | 0x00000004L) // DS, ES, FS, GS
+#define CONTEXT_FLOATING_POINT  (CONTEXT_i386 | 0x00000008L) // 387 state
+#define CONTEXT_DEBUG_REGISTERS (CONTEXT_i386 | 0x00000010L) // DB 0-3,6,7
+ 
+#define CONTEXT_FULL (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS)
+
+#ifdef _WIN64
+#define IMAGE_ORDINAL_FLAG              IMAGE_ORDINAL_FLAG64
+#define IMAGE_ORDINAL(Ordinal)          IMAGE_ORDINAL64(Ordinal)
+typedef IMAGE_THUNK_DATA64              IMAGE_THUNK_DATA;
+typedef PIMAGE_THUNK_DATA64             PIMAGE_THUNK_DATA;
+#define IMAGE_SNAP_BY_ORDINAL(Ordinal)  IMAGE_SNAP_BY_ORDINAL64(Ordinal)
+typedef IMAGE_TLS_DIRECTORY64           IMAGE_TLS_DIRECTORY;
+typedef PIMAGE_TLS_DIRECTORY64          PIMAGE_TLS_DIRECTORY;
+#else
+#define IMAGE_ORDINAL_FLAG              IMAGE_ORDINAL_FLAG32
+#define IMAGE_ORDINAL(Ordinal)          IMAGE_ORDINAL32(Ordinal)
+typedef IMAGE_THUNK_DATA32              IMAGE_THUNK_DATA;
+typedef PIMAGE_THUNK_DATA32             PIMAGE_THUNK_DATA;
+#define IMAGE_SNAP_BY_ORDINAL(Ordinal)  IMAGE_SNAP_BY_ORDINAL32(Ordinal)
+typedef IMAGE_TLS_DIRECTORY32           IMAGE_TLS_DIRECTORY;
+typedef PIMAGE_TLS_DIRECTORY32          PIMAGE_TLS_DIRECTORY;
+#endif
 
 typedef struct _RTL_CRITICAL_SECTION_DEBUG
 {
@@ -1552,6 +1871,17 @@ typedef struct _IMAGE_DATA_DIRECTORY {
     DWORD VirtualAddress;
     DWORD Size;
 } IMAGE_DATA_DIRECTORY, *PIMAGE_DATA_DIRECTORY;
+
+typedef struct _RTL_CALLER_ALLOCATED_ACTIVATION_CONTEXT_STACK_FRAME_EXTENDED
+{
+    ULONG Size;
+    ULONG Format;
+    RTL_ACTIVATION_CONTEXT_STACK_FRAME Frame;
+    PVOID Extra1;
+    PVOID Extra2;
+    PVOID Extra3;
+    PVOID Extra4;
+} RTL_CALLER_ALLOCATED_ACTIVATION_CONTEXT_STACK_FRAME_EXTENDED, *PRTL_CALLER_ALLOCATED_ACTIVATION_CONTEXT_STACK_FRAME_EXTENDED;
 
 typedef struct _IMAGE_OPTIONAL_HEADER32 {
     WORD                 Magic;
@@ -2185,6 +2515,10 @@ typedef struct _PEB {
     ULONG NtGlobalFlag2;
     ULONGLONG ExtendedFeatureDisableMask;
 } PEB, *PPEB;
+
+FARPROC WINAPI GetProcAddress(HINSTANCE hModule, LPCSTR lpProcName);
+DWORD BaseSetLastNTError( _In_ NTSTATUS Status );
+PVOID WINAPI BasepMapModuleHandle(HMODULE hModule, BOOLEAN AsDataFile);
 
 #ifdef __cplusplus
 }
