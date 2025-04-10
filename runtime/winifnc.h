@@ -11,10 +11,9 @@ extern "C" {
 
 __forceinline
 PWSTR
-NTAPI
-RtlGetNtSystemRoot(
+GetNtSystemRoot(
     VOID
-    )
+)
 {
     if (NtCurrentPeb()->SharedData && NtCurrentPeb()->SharedData->ServiceSessionId)
         return NtCurrentPeb()->SharedData->NtSystemRoot;
@@ -24,22 +23,27 @@ RtlGetNtSystemRoot(
 
 __forceinline
 VOID
-RtlInitUnicodeString(
+InitStaticUnicodeString(
     _Out_ PUNICODE_STRING DestinationString,
     _In_ PCWSTR SourceString
-    )
+)
 {
     if (SourceString)
-        DestinationString->MaximumLength = (DestinationString->Length = (USHORT)(wcslen(SourceString) * sizeof(WCHAR))) + sizeof(UNICODE_NULL);
+    {
+        DestinationString->Length = (USHORT)(wcslen(SourceString) * sizeof(WCHAR));
+        DestinationString->MaximumLength = DestinationString->Length + sizeof(UNICODE_NULL);
+    }
     else
-        DestinationString->MaximumLength = DestinationString->Length = 0;
-
-    DestinationString->Buffer = (PWCH)SourceString;
+    {
+        DestinationString->Length = 0;
+        DestinationString->MaximumLength = 0;
+    }
+    DestinationString->Buffer = (PWSTR)SourceString;
 }
 
 __forceinline
 VOID
-RtlInitEmptyUnicodeString(
+InitEmptyStaticUnicodeString(
     _Out_ PUNICODE_STRING UnicodeString,
     _In_ PWCHAR Buffer,
     _In_ USHORT BufferSize
@@ -50,12 +54,12 @@ RtlInitEmptyUnicodeString(
     UnicodeString->MaximumLength = BufferSize;
 }
 
-__forceinline 
+__forceinline
 VOID 
-RtlCopyUnicodeString(
+CopyStaticUnicodeString(
     _Out_ PUNICODE_STRING DestinationString,
     _In_ PUNICODE_STRING SourceString
-    )
+)
 {
     DestinationString->Length = SourceString->Length;
     DestinationString->MaximumLength = SourceString->MaximumLength;
@@ -63,7 +67,11 @@ RtlCopyUnicodeString(
 }
 
 __forceinline
-NTSTATUS RtlAppendUnicodeStringToString(PUNICODE_STRING DestinationString, PUNICODE_STRING SourceString)
+NTSTATUS
+AppendStaticUnicodeString(
+    PUNICODE_STRING DestinationString,
+    PUNICODE_STRING SourceString
+)
 {
     USHORT newLength = DestinationString->Length + SourceString->Length;
     if (newLength > DestinationString->MaximumLength - sizeof(UNICODE_NULL))
@@ -80,7 +88,12 @@ NTSTATUS RtlAppendUnicodeStringToString(PUNICODE_STRING DestinationString, PUNIC
 }
 
 __forceinline
-int RtlEqualUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *String2, int CaseInsensitive)
+int
+EqualUnicodeString(
+    const UNICODE_STRING *String1,
+    const UNICODE_STRING *String2,
+    int CaseInsensitive
+)
 {
     if (String1->Length != String2->Length)
         return 0;
@@ -96,108 +109,8 @@ int RtlEqualUnicodeString(const UNICODE_STRING *String1, const UNICODE_STRING *S
 }
 
 __forceinline
-NTSTATUS RtlDuplicateUnicodeString(unsigned long Flags, const UNICODE_STRING *SourceString, PUNICODE_STRING DestinationString)
-{
-    size_t newSize = SourceString->Length + sizeof(UNICODE_NULL);
-    if (newSize > (1024 * 1024))
-    {
-        return STATUS_BUFFER_OVERFLOW;
-    }
-    PWSTR newBuffer = (PWSTR)__bootstrap_malloc(newSize);
-    if (!newBuffer)
-    {
-        return STATUS_NO_MEMORY;
-    }
-    memcpy(newBuffer, SourceString->Buffer, SourceString->Length);
-    newBuffer[SourceString->Length / sizeof(WCHAR)] = UNICODE_NULL;
-
-    DestinationString->Buffer = newBuffer;
-    DestinationString->Length = SourceString->Length;
-    DestinationString->MaximumLength = (USHORT)newSize;
-    return 0;
-}
-
-__forceinline
-VOID RtlFreeUnicodeString(PUNICODE_STRING UnicodeString)
-{
-    if (UnicodeString->Buffer)
-    {
-        __bootstrap_free(UnicodeString->Buffer);
-        UnicodeString->Buffer = nullptr;
-        UnicodeString->Length = 0;
-        UnicodeString->MaximumLength = 0;
-    }
-}
-
-__forceinline
-VOID
-RtlInitAnsiString(
-    _Out_ PANSI_STRING DestinationString,
-    _In_opt_ PCSZ SourceString
-    )
-{
-    if (SourceString)
-    {
-        DestinationString->Length = (USHORT)strlen(SourceString);
-        DestinationString->MaximumLength = DestinationString->Length + 1;
-    }
-    else
-    {
-        DestinationString->Length = 0;
-        DestinationString->MaximumLength = 0;
-    }
-
-    DestinationString->Buffer = (PCHAR)SourceString;
-}
-
-__forceinline
-NTSTATUS
-RtlAnsiStringToUnicodeString(
-    _Out_ PUNICODE_STRING DestinationString,
-    _In_ const ANSI_STRING *SourceString,
-    _In_ BOOLEAN AllocateDestinationString
-)
-{
-    if (!SourceString || !SourceString->Buffer)
-    {
-        DestinationString->Buffer = nullptr;
-        DestinationString->Length = 0;
-        DestinationString->MaximumLength = 0;
-        return 0;
-    }
-    
-    size_t ansiLen = SourceString->Length;
-    size_t requiredSize = (ansiLen + 1) * sizeof(WCHAR);
-    PWSTR buffer = nullptr;
-    
-    if (AllocateDestinationString)
-    {
-        buffer = (PWSTR)__bootstrap_malloc(requiredSize);
-        if (!buffer)
-            return STATUS_NO_MEMORY;
-    }
-    else
-    {
-        if (DestinationString->MaximumLength < requiredSize)
-            return STATUS_BUFFER_OVERFLOW;
-        buffer = DestinationString->Buffer;
-    }
-    
-    for (size_t i = 0; i < ansiLen; i++)
-    {
-        buffer[i] = (WCHAR)SourceString->Buffer[i]; /* todo this might not be the best */
-    }
-    buffer[ansiLen] = UNICODE_NULL;
-    
-    DestinationString->Buffer = buffer;
-    DestinationString->Length = (USHORT)(ansiLen * sizeof(WCHAR));
-    DestinationString->MaximumLength = (USHORT)requiredSize;
-    
-    return 0;
-}
-
-__forceinline
-LONG RtlCompareUnicodeString(
+LONG
+CompareUnicodeString(
     PUNICODE_STRING String1,
     PUNICODE_STRING String2,
     BOOLEAN CaseInSensitive
@@ -211,10 +124,10 @@ LONG RtlCompareUnicodeString(
 
 __forceinline
 NTSTATUS
-RtlInitUnicodeStringEx(
+InitStaticUnicodeStringEx(
     _Out_ PUNICODE_STRING DestinationString,
     _In_opt_ PCWSTR SourceString
-    )
+)
 {
     if (!DestinationString)
         return STATUS_INVALID_PARAMETER;
@@ -235,17 +148,144 @@ RtlInitUnicodeStringEx(
         DestinationString->MaximumLength = 0;
         DestinationString->Buffer = nullptr;
     }
-
     return 0;
 }
 
 __forceinline
-PVOID RtlpAllocateStringMemory(SIZE_T size, LONG) {
-    return __bootstrap_malloc(size);
+NTSTATUS
+DuplicateUnicodeStringDynamic(
+    const UNICODE_STRING *SourceString,
+    PUNICODE_STRING DestinationString
+)
+{
+    size_t newSize = SourceString->Length + sizeof(UNICODE_NULL);
+    if (newSize > (1024 * 1024))
+    {
+        return STATUS_BUFFER_OVERFLOW;
+    }
+    PWSTR newBuffer = (PWSTR)MemoryAllocate(newSize);
+    if (!newBuffer)
+    {
+        return STATUS_NO_MEMORY;
+    }
+    memcpy(newBuffer, SourceString->Buffer, SourceString->Length);
+    newBuffer[SourceString->Length / sizeof(WCHAR)] = UNICODE_NULL;
+
+    DestinationString->Buffer = newBuffer;
+    DestinationString->Length = SourceString->Length;
+    DestinationString->MaximumLength = (USHORT)newSize;
+    return 0;
 }
 
 __forceinline
-NTSTATUS NTAPI RtlCharToInteger(PCSZ str, ULONG base, PULONG value)
+VOID
+FreeDynamicUnicodeString(
+    PUNICODE_STRING UnicodeString
+)
+{
+    if (UnicodeString->Buffer)
+    {
+        MemoryFree(UnicodeString->Buffer);
+        UnicodeString->Buffer = nullptr;
+        UnicodeString->Length = 0;
+        UnicodeString->MaximumLength = 0;
+    }
+}
+
+__forceinline
+VOID
+InitAnsiStringCustom(
+    _Out_ PANSI_STRING DestinationString,
+    _In_opt_ PCSZ SourceString
+)
+{
+    if (SourceString)
+    {
+        DestinationString->Length = (USHORT)strlen(SourceString);
+        DestinationString->MaximumLength = DestinationString->Length + 1;
+    }
+    else
+    {
+        DestinationString->Length = 0;
+        DestinationString->MaximumLength = 0;
+    }
+    DestinationString->Buffer = (PCHAR)SourceString;
+}
+
+__forceinline
+NTSTATUS
+ConvertAnsiToUnicodeStringDynamic(
+    _Out_ PUNICODE_STRING DestinationString,
+    _In_ const ANSI_STRING *SourceString
+)
+{
+    if (!SourceString || !SourceString->Buffer)
+    {
+        DestinationString->Buffer = nullptr;
+        DestinationString->Length = 0;
+        DestinationString->MaximumLength = 0;
+        return 0;
+    }
+    
+    size_t ansiLen = SourceString->Length;
+    size_t requiredSize = (ansiLen + 1) * sizeof(WCHAR);
+    PWSTR buffer = (PWSTR)MemoryAllocate(requiredSize);
+    if (!buffer)
+        return STATUS_NO_MEMORY;
+    
+    for (size_t i = 0; i < ansiLen; i++)
+    {
+        buffer[i] = (WCHAR)SourceString->Buffer[i];
+    }
+    buffer[ansiLen] = UNICODE_NULL;
+    
+    DestinationString->Buffer = buffer;
+    DestinationString->Length = (USHORT)(ansiLen * sizeof(WCHAR));
+    DestinationString->MaximumLength = (USHORT)requiredSize;
+    
+    return 0;
+}
+
+__forceinline
+NTSTATUS
+ConvertAnsiToUnicodeStringStatic(
+    _Out_ PUNICODE_STRING DestinationString,
+    _In_ const ANSI_STRING *SourceString
+)
+{
+    if (!SourceString || !SourceString->Buffer)
+    {
+        DestinationString->Buffer = nullptr;
+        DestinationString->Length = 0;
+        DestinationString->MaximumLength = 0;
+        return 0;
+    }
+    
+    size_t ansiLen = SourceString->Length;
+    size_t requiredSize = (ansiLen + 1) * sizeof(WCHAR);
+    if (DestinationString->MaximumLength < requiredSize)
+        return STATUS_BUFFER_OVERFLOW;
+    
+    PWSTR buffer = DestinationString->Buffer;
+    
+    for (size_t i = 0; i < ansiLen; i++)
+    {
+        buffer[i] = (WCHAR)SourceString->Buffer[i];
+    }
+    buffer[ansiLen] = UNICODE_NULL;
+    
+    DestinationString->Length = (USHORT)(ansiLen * sizeof(WCHAR));
+    
+    return 0;
+}
+
+__forceinline
+NTSTATUS
+CharToInteger(
+    PCSZ str,
+    ULONG base,
+    PULONG value
+)
 {
     CHAR chCurrent;
     int digit;
@@ -267,7 +307,6 @@ NTSTATUS NTAPI RtlCharToInteger(PCSZ str, ULONG base, PULONG value)
     if (base == 0)
     {
         base = 10;
-
         if (str[0] == '0')
         {
             if (str[1] == 'b')
@@ -297,7 +336,6 @@ NTSTATUS NTAPI RtlCharToInteger(PCSZ str, ULONG base, PULONG value)
     while (*str != '\0')
     {
         chCurrent = *str;
-
         if (chCurrent >= '0' && chCurrent <= '9')
         {
             digit = chCurrent - '0';
@@ -316,7 +354,6 @@ NTSTATUS NTAPI RtlCharToInteger(PCSZ str, ULONG base, PULONG value)
         }
 
         if (digit < 0 || digit >= (int)base) break;
-
         RunningTotal = RunningTotal * base + digit;
         str++;
     }
@@ -326,7 +363,8 @@ NTSTATUS NTAPI RtlCharToInteger(PCSZ str, ULONG base, PULONG value)
 }
 
 __forceinline
-VOID InsertTailList(
+VOID
+InsertTailList(
     PLIST_ENTRY ListHead,
     PLIST_ENTRY Entry
 )
@@ -339,7 +377,11 @@ VOID InsertTailList(
 }
 
 __forceinline
-VOID InsertHeadList(PLIST_ENTRY ListHead, PLIST_ENTRY Entry)
+VOID
+InsertHeadList(
+    PLIST_ENTRY ListHead,
+    PLIST_ENTRY Entry
+)
 {
     PLIST_ENTRY FirstEntry = ListHead->Flink;
     Entry->Flink = FirstEntry;
@@ -349,7 +391,10 @@ VOID InsertHeadList(PLIST_ENTRY ListHead, PLIST_ENTRY Entry)
 }
 
 __forceinline
-VOID RemoveEntryList(PLIST_ENTRY Entry)
+VOID
+RemoveEntryList(
+    PLIST_ENTRY Entry
+)
 {
     PLIST_ENTRY Prev = Entry->Blink;
     PLIST_ENTRY Next = Entry->Flink;
@@ -359,37 +404,31 @@ VOID RemoveEntryList(PLIST_ENTRY Entry)
 }
 
 __forceinline
-int IsListEmpty(PLIST_ENTRY ListHead)
+int
+IsListEmpty(
+    PLIST_ENTRY ListHead
+)
 {
     return (ListHead->Flink == ListHead);
 }
 
 __forceinline
-BOOLEAN NTAPI RtlpCheckForActiveDebugger()
+BOOLEAN
+CheckForActiveDebugger(
+    VOID
+)
 {
     return NtCurrentPeb()->BeingDebugged;
 }
 
 __forceinline
-void YieldProcessor()
-{
-    __asm__ __volatile__("pause" : : : "memory");
-}
-
-__forceinline
-void DbgBreakPoint()
+void
+DebugBreakPoint(
+    VOID
+)
 {
     __asm__ __volatile__("int $0x3");
 }
-
-__forceinline
-unsigned long long __ull_rshift(const unsigned long long Mask, int Bit)
-{
-    return Mask >> Bit;
-}
-
-#define Int64ShrlMod32(a,b) __ull_rshift(a,b)
-#define UInt32x32To64(a,b) ((unsigned __int64)(unsigned int)(a)*(unsigned __int64)(unsigned int)(b))
 
 #ifdef __cplusplus
 }

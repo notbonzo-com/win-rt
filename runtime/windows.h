@@ -96,6 +96,7 @@ typedef __WCHAR_TYPE__*         PWCH;
 typedef const char*             PCSZ;
 typedef DWORD                   DWORD_PTR;
 typedef ULONGLONG*              PULONG_PTR;
+typedef DWORD*                  PDWORD;
 
 typedef unsigned char           BOOLEAN;
 
@@ -234,6 +235,12 @@ typedef int(* FARPROC) ();
 #define RTL_DOS_APPLY_FILE_REDIRECTION_USTR_FLAG_RESPECT_DOT_LOCAL 1
 #define LDRP_ENTRY_PROCESSED   0x00004000
 
+#define HEAP_ENTRY_BUSY             0x01
+#define HEAP_ENTRY_EXTRA_PRESENT    0x02
+#define HEAP_ENTRY_FILL_PATTERN     0x04
+#define HEAP_ENTRY_VIRTUAL_ALLOC    0x08
+#define HEAP_ENTRY_LAST_ENTRY       0x10
+
 #define SYNCHRONIZE   (0x00100000L)
 #define FILE_EXECUTE   ( 0x0020 )
 #define FILE_NON_DIRECTORY_FILE   0x00000040
@@ -355,6 +362,261 @@ typedef struct _XSAVE_FORMAT
     struct _M128A XmmRegisters[16];
     UCHAR Reserved4[96];
 } XSAVE_FORMAT, *PXSAVE_FORMAT; 
+
+struct _HEAP_EXTENDED_ENTRY
+{
+    VOID* Reserved;
+    union
+    {
+        struct
+        {
+            USHORT FunctionIndex;
+            USHORT ContextValue;
+        };
+        ULONG InterceptorValue;
+    };
+    USHORT UnusedBytesLength;
+    UCHAR EntryOffset;
+    UCHAR ExtendedBlockSignature;
+};
+
+struct _HEAP_UNPACKED_ENTRY
+{
+    VOID* PreviousBlockPrivateData;
+    union
+    {
+        struct
+        {
+            USHORT Size;
+            UCHAR Flags;
+            UCHAR SmallTagIndex;
+        };
+        struct
+        {
+            ULONG SubSegmentCode;
+            USHORT PreviousSize;
+            union
+            {
+                UCHAR SegmentOffset;
+                UCHAR LFHFlags;
+            };
+            UCHAR UnusedBytes;
+        };
+        ULONGLONG CompactHeader;
+    };
+};
+
+struct _HEAP_ENTRY
+{
+    union
+    {
+        struct _HEAP_UNPACKED_ENTRY UnpackedEntry;
+        struct
+        {
+            VOID* PreviousBlockPrivateData;
+            union
+            {
+                struct
+                {
+                    USHORT Size;
+                    UCHAR Flags;
+                    UCHAR SmallTagIndex;
+                };
+                struct
+                {
+                    ULONG SubSegmentCode;
+                    USHORT PreviousSize;
+                    union
+                    {
+                        UCHAR SegmentOffset;
+                        UCHAR LFHFlags;
+                    };
+                    UCHAR UnusedBytes;
+                };
+                ULONGLONG CompactHeader;
+            };
+        };
+        struct _HEAP_EXTENDED_ENTRY ExtendedEntry;
+        struct
+        {
+            VOID* Reserved;
+            union
+            {
+                struct
+                {
+                    USHORT FunctionIndex;
+                    USHORT ContextValue;
+                };
+                ULONG InterceptorValue;
+            };
+            USHORT UnusedBytesLength;
+            UCHAR EntryOffset;
+            UCHAR ExtendedBlockSignature;
+        };
+        struct
+        {
+            VOID* ReservedForAlignment;
+            union
+            {
+                struct
+                {
+                    ULONG Code1;
+                    union
+                    {
+                        struct
+                        {
+                            USHORT Code2;
+                            UCHAR Code3;
+                            UCHAR Code4;
+                        };
+                        ULONG Code234;
+                    };
+                };
+                ULONGLONG AgregateCode;
+            };
+        };
+    };
+};
+
+struct _HEAP_SEGMENT
+{
+    struct _HEAP_ENTRY Entry;
+    ULONG SegmentSignature;
+    ULONG SegmentFlags;
+    struct _LIST_ENTRY SegmentListEntry;
+    struct _HEAP* Heap;
+    VOID* BaseAddress;
+    ULONG NumberOfPages;
+    struct _HEAP_ENTRY* FirstEntry;
+    struct _HEAP_ENTRY* LastValidEntry;
+    ULONG NumberOfUnCommittedPages;
+    ULONG NumberOfUnCommittedRanges;
+    USHORT SegmentAllocatorBackTraceIndex;
+    USHORT Reserved;
+    struct _LIST_ENTRY UCRSegmentList;
+};
+
+union _RTL_RUN_ONCE
+{
+    VOID* Ptr;
+    ULONGLONG Value;
+    ULONGLONG State:2;
+};
+
+struct _RTLP_HEAP_COMMIT_LIMIT_DATA
+{
+    ULONGLONG CommitLimitBytes;
+    ULONGLONG CommitLimitFailureCode;
+};
+
+struct _HEAP_COUNTERS
+{
+    ULONGLONG TotalMemoryReserved;
+    ULONGLONG TotalMemoryCommitted;
+    ULONGLONG TotalMemoryLargeUCR;
+    ULONGLONG TotalSizeInVirtualBlocks;
+    ULONG TotalSegments;
+    ULONG TotalUCRs;
+    ULONG CommittOps;
+    ULONG DeCommitOps;
+    ULONG LockAcquires;
+    ULONG LockCollisions;
+    ULONG CommitRate;
+    ULONG DecommittRate;
+    ULONG CommitFailures;
+    ULONG InBlockCommitFailures;
+    ULONG PollIntervalCounter;
+    ULONG DecommitsSinceLastCheck;
+    ULONG HeapPollInterval;
+    ULONG AllocAndFreeOps;
+    ULONG AllocationIndicesActive;
+    ULONG InBlockDeccommits;
+    ULONGLONG InBlockDeccomitSize;
+    ULONGLONG HighWatermarkSize;
+    ULONGLONG LastPolledSize;
+}; 
+
+struct _HEAP_TUNING_PARAMETERS
+{
+    ULONG CommittThresholdShift;
+    ULONGLONG MaxPreCommittThreshold;
+};
+
+typedef struct _HEAP
+{
+    union
+    {
+        struct _HEAP_SEGMENT Segment;
+        struct
+        {
+            struct _HEAP_ENTRY Entry;
+            ULONG SegmentSignature;
+            ULONG SegmentFlags;
+            struct _LIST_ENTRY SegmentListEntry;
+            struct _HEAP* Heap;
+            VOID* BaseAddress;
+            ULONG NumberOfPages;
+            struct _HEAP_ENTRY* FirstEntry;
+            struct _HEAP_ENTRY* LastValidEntry;
+            ULONG NumberOfUnCommittedPages;
+            ULONG NumberOfUnCommittedRanges;
+            USHORT SegmentAllocatorBackTraceIndex;
+            USHORT Reserved;
+            struct _LIST_ENTRY UCRSegmentList;
+        };
+    };
+    ULONG Flags;
+    ULONG ForceFlags;
+    ULONG CompatibilityFlags;
+    ULONG EncodeFlagMask;
+    struct _HEAP_ENTRY Encoding;
+    ULONG Interceptor;
+    ULONG VirtualMemoryThreshold;
+    ULONG Signature;
+    ULONGLONG SegmentReserve;
+    ULONGLONG SegmentCommit;
+    ULONGLONG DeCommitFreeBlockThreshold;
+    ULONGLONG DeCommitTotalFreeThreshold;
+    ULONGLONG TotalFreeSize;
+    ULONGLONG MaximumAllocationSize;
+    USHORT ProcessHeapsListIndex;
+    USHORT HeaderValidateLength;
+    VOID* HeaderValidateCopy;
+    USHORT NextAvailableTagIndex;
+    USHORT MaximumTagIndex;
+    struct _HEAP_TAG_ENTRY* TagEntries;
+    struct _LIST_ENTRY UCRList;
+    ULONGLONG AlignRound;
+    ULONGLONG AlignMask;
+    struct _LIST_ENTRY VirtualAllocdBlocks;
+    struct _LIST_ENTRY SegmentList;
+    USHORT AllocatorBackTraceIndex;
+    ULONG NonDedicatedListLength;
+    VOID* BlocksIndex;
+    VOID* UCRIndex;
+    struct _HEAP_PSEUDO_TAG_ENTRY* PseudoTagEntries;
+    struct _LIST_ENTRY FreeLists;
+    struct _HEAP_LOCK* LockVariable;
+    LONG (*CommitRoutine)(VOID* arg1, VOID** arg2, ULONGLONG* arg3);
+    union _RTL_RUN_ONCE StackTraceInitVar;
+    struct _RTLP_HEAP_COMMIT_LIMIT_DATA CommitLimitData;
+    VOID* UserContext;
+    ULONGLONG Spare;
+    VOID* FrontEndHeap;
+    USHORT FrontHeapLockCount;
+    UCHAR FrontEndHeapType;
+    UCHAR RequestedFrontEndHeapType;
+    USHORT* FrontEndHeapUsageData;
+    USHORT FrontEndHeapMaximumIndex;
+    volatile UCHAR FrontEndHeapStatusBitmap[129];
+    union
+    {
+        UCHAR ReadOnly:1;
+        UCHAR InternalFlags;
+    };
+    struct _HEAP_COUNTERS Counters;
+    struct _HEAP_TUNING_PARAMETERS TuningParameters;
+} HEAP, *PHEAP;
 
 typedef struct _CONTEXT
 {
@@ -1752,6 +2014,19 @@ typedef struct _WER_MEMORY
     PVOID Address;
     ULONG Size;
 } WER_MEMORY, *PWER_MEMORY;
+
+typedef struct _OVERLAPPED {
+    ULONG_PTR Internal;
+    ULONG_PTR InternalHigh;
+    union {
+      struct {
+        DWORD Offset;
+        DWORD OffsetHigh;
+      } DUMMYSTRUCTNAME;
+      PVOID Pointer;
+    } DUMMYUNIONNAME;
+    HANDLE    hEvent;
+} OVERLAPPED, *LPOVERLAPPED;
 
 typedef struct _WER_GATHER
 {

@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <winifnc.h>
 
-PLDR_DATA_TABLE_ENTRY __bootstrap_find_module(unsigned long long target_hash) {
+PLDR_DATA_TABLE_ENTRY FindInMemoryModuleByHash(unsigned long long target_hash) {
     PPEB pPeb = NtCurrentPeb();
     PPEB_LDR_DATA pLdr = pPeb->Ldr;
     PLIST_ENTRY pListHead = &pLdr->InLoadOrderModuleList;
@@ -12,7 +12,7 @@ PLDR_DATA_TABLE_ENTRY __bootstrap_find_module(unsigned long long target_hash) {
     {
         PLDR_DATA_TABLE_ENTRY pEntry =
             CONTAINING_RECORD(pListEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-        if (__bootstrap_fnv1a_whash(pEntry->BaseDllName.Buffer) == target_hash)
+        if (fnv1aWideHash(pEntry->BaseDllName.Buffer) == target_hash)
         {
             return pEntry;
             break;
@@ -22,7 +22,7 @@ PLDR_DATA_TABLE_ENTRY __bootstrap_find_module(unsigned long long target_hash) {
     return nullptr;
 }
 
-PVOID __bootstrap_get_export(PLDR_DATA_TABLE_ENTRY module, unsigned long long target_hash) {
+PVOID FindExportByHash(PLDR_DATA_TABLE_ENTRY module, unsigned long long target_hash) {
     if (!module)
         return nullptr;
 
@@ -59,7 +59,7 @@ PVOID __bootstrap_get_export(PLDR_DATA_TABLE_ENTRY module, unsigned long long ta
         if (!func_name)
             continue;
 
-        if (__bootstrap_fnv1a_hash(func_name) == target_hash)
+        if (fnv1aHash(func_name) == target_hash)
         {
             USHORT ordinal = ordinals[i];
             if (ordinal >= export_dir->NumberOfFunctions)

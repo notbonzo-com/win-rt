@@ -1,29 +1,20 @@
 #include <windows.h>
 
-/* Constants for the bootstrap buddy allocator:
-	- BUDDY_REGION_SIZE is 1 MiB.
-	- MIN_BLOCK_SIZE is 32 bytes.
-	- NUM_LEVELS is computed so that level 0 is the whole region and the
-  highest level (NUM_LEVELS-1) yields blocks of MIN_BLOCK_SIZE.
-*/
-#define BUDDY_REGION_SIZE (1 << 20)  /* 1 MiB */
-#define MIN_BLOCK_SIZE 32
-#define NUM_LEVELS (20 - 5 + 1)  /* since 1 MiB=2^20 and 32=2^5, we have 16 levels */
+#define REGION_BITS 20       /* 1 MiB region (2^20) */
+#define MIN_BLOCK_BITS 5     /* 32 bytes (2^5) */
+#define BUDDY_REGION_SIZE (1 << REGION_BITS)
+#define MIN_BLOCK_SIZE (1 << MIN_BLOCK_BITS)
+#define NUM_LEVELS (REGION_BITS - MIN_BLOCK_BITS + 1)
 
 struct FreeBlock {
-	struct FreeBlock *next;
+    struct FreeBlock *next;
 };
 
 struct BlockHeader {
-    unsigned int level;  /* which free-list level this block came from */
+    unsigned int level;
 };
 
 static char buddy_region[BUDDY_REGION_SIZE];
-
-/* An array of free-lists for each block size. 
-   Level 0: blocks of size BUDDY_REGION_SIZE.
-   Level (NUM_LEVELS-1): blocks of size MIN_BLOCK_SIZE.
-*/
 static struct FreeBlock *freeLists[NUM_LEVELS];
 static int initialized = 0;
 
@@ -32,41 +23,91 @@ static size_t block_size(int level) {
 }
 
 static void buddy_init(void) {
-    for (int i = 0; i < NUM_LEVELS; i++)
-        freeLists[i] = 0;
+    for (int i = 0; i < NUM_LEVELS; i++) {
+        freeLists[i] = nullptr;
+    }
     freeLists[0] = (struct FreeBlock*)buddy_region;
     freeLists[0]->next = nullptr;
     initialized = 1;
 }
 
-static void *buddy_alloc(int desired_level) {
+static void buddy_free_iter(void *addr, int level) {
+    char *base = buddy_region;
+    size_t bs;
+    size_t offset, buddy_offset;
+    void *buddy_addr;
+
+    while (1) {
+        if (level == 0)
+            break;  /* Cannot merge further than the full region. */
+        bs = block_size(level);
+        offset = (char*)addr - base;
+        buddy_offset = offset ^ bs;
+        buddy_addr = base + buddy_offset;
+
+        /* Search for the buddy in freeLists[level]. */
+        struct FreeBlock **prev = &freeLists[level];
+        struct FreeBlock *curr = freeLists[level];
+        while (curr) {
+            if ((void*)curr == buddy_addr)
+                break;
+            prev = &curr->next;
+            curr = curr->next;
+        }
+        if (!curr)
+            break;  /* Buddy is not free; merging stops. */
+
+        /* Remove the buddy block from the free list. */
+        *prev = curr->next;
+
+        /* Select the lower address to represent the merged block. */
+        if (offset > buddy_offset) {
+            addr = buddy_addr;
+        }
+        /* Move up one level (i.e. merge to form a larger block). */
+        level--;
+    }
+    /* Insert the (merged) block into the appropriate free list. */
+    struct FreeBlock *block = (struct FreeBlock*)addr;
+    block->next = freeLists[level];
+    freeLists[level] = block;
+}
+
+void MemoryFree(void *ptr) {
+    if (!ptr)
+        return;
+    struct BlockHeader *header = (struct BlockHeader*)((char*)ptr - sizeof(struct BlockHeader));
+
+    int level = header->level;
+    void *block_addr = (void*)header;
+    buddy_free_iter(block_addr, level);
+}
+
+static void *buddy_alloc_level(int desired_level) {
     int i;
-    /* start from smallest block (0) and search for desired (note: for small allocations, desired_level is high; only free block initially is at level 0) */
     for (i = 0; i <= desired_level; i++) {
         if (freeLists[i] != nullptr)
             break;
     }
-    if (i > desired_level) {
-        /* no block available in any larger class */
-        return nullptr;
-    }
-    /* split the found block repeatedly until reaching desired_level */
+    if (i > desired_level)
+        return nullptr;  /* No sufficiently large block available. */
+    
+    /* Split blocks until reaching the desired level. */
     while (i < desired_level) {
-        /* remove one block */
         struct FreeBlock *block = freeLists[i];
         freeLists[i] = block->next;
-        /* split block into two buddies for level i+1 */
         size_t bs = block_size(i + 1);
+        /* Split the block into two buddies. */
         struct FreeBlock *buddy1 = block;
         struct FreeBlock *buddy2 = (struct FreeBlock*)((char*)block + bs);
-        /* insert both buddies into freeLists[i+1] */
+        /* Insert both buddies into the next free list. */
         buddy1->next = freeLists[i + 1];
         freeLists[i + 1] = buddy1;
         buddy2->next = freeLists[i + 1];
         freeLists[i + 1] = buddy2;
         i++;
     }
-    /* reached desired level */
+    /* Remove and return a block at the desired level. */
     struct FreeBlock *block = freeLists[desired_level];
     if (block) {
         freeLists[desired_level] = block->next;
@@ -75,108 +116,88 @@ static void *buddy_alloc(int desired_level) {
     return nullptr;
 }
 
-/* Helper function to merge a free block with its buddy if possible.
-   'level' is the current size class of the block pointed to by addr.
-   Merging continues recursively until no merge is possible.
-*/
-static void buddy_free(void *addr, int level) {
-    /* if largest block, merging is not possible */
-    if (level == 0) {
-        struct FreeBlock *block = (struct FreeBlock*)addr;
-        block->next = freeLists[level];
-        freeLists[level] = block;
-        return;
-    }
-    char *base = buddy_region;
-    size_t bs = block_size(level);
-    size_t offset = (char*)addr - base;
-    /* buddy's offset is XOR with size */
-    size_t buddy_offset = offset ^ bs;
-    void *buddy_addr = base + buddy_offset;
-    
-    /* iterate freeLists[level] for the buddy block */
-    struct FreeBlock **prev = &freeLists[level];
-    for (struct FreeBlock *curr = freeLists[level]; curr; curr = curr->next) {
-        if ((void*)curr == buddy_addr) {
-            /* found */
-            *prev = curr->next;
-            void *combined = (offset < buddy_offset) ? addr : buddy_addr;
-            buddy_free(combined, level - 1);
-            return;
-        }
-        prev = &curr->next;
-    }
-    /* not free: insert into freeLists[level]. */
-    struct FreeBlock *block = (struct FreeBlock*)addr;
-    block->next = freeLists[level];
-    freeLists[level] = block;
-}
-
-void *__bootstrap_malloc(size_t size) {
+void *MemoryAllocate(size_t size) {
     if (size == 0)
         return nullptr;
-    
-    if (!NtCurrentPeb()->ProcessHeap)
-        return nullptr;
-    
     if (!initialized)
         buddy_init();
-    
+
+    /* Compute total block size needed (user size + header). */
     size_t total_size = size + sizeof(struct BlockHeader);
-    
-    /* smallest level L such that block_size(L) >= total_size */
     int level = -1;
+    /* Find the smallest level (i.e. smallest block) where the block size is sufficient. */
     for (int L = NUM_LEVELS - 1; L >= 0; L--) {
         if (block_size(L) >= total_size) {
             level = L;
             break;
         }
     }
-    if (level < 0) {
-        /* size too large */
-        return nullptr;
-    }
-    
-    void *block = buddy_alloc(level);
+    if (level < 0)
+        return nullptr;  /* Request too large. */
+
+    void *block = buddy_alloc_level(level);
     if (!block)
         return nullptr;
-    
+
+    /* Initialize header and return a pointer past the header. */
     struct BlockHeader *header = (struct BlockHeader*)block;
     header->level = level;
-    
-    /* return the LAST header (NOT current) */
     return (void*)((char*)block + sizeof(struct BlockHeader));
 }
 
-void __bootstrap_free(void *ptr) {
-    if (!ptr)
-        return;
-    struct BlockHeader *header = (struct BlockHeader*)((char*)ptr - sizeof(struct BlockHeader));
-    int level = header->level;
-    void *block = (void*)header;
-    buddy_free(block, level);
+static void buddy_shrink(void *block, int current_level, int target_level) {
+    struct BlockHeader *header = (struct BlockHeader*)block;
+    while (current_level < target_level) {
+        size_t bs = block_size(current_level + 1);
+        void *buddy_addr = (void*)((char*)block + bs);
+        /* Free the buddy block (which is now not in use). */
+        buddy_free_iter(buddy_addr, current_level + 1);
+        current_level++;
+        header->level = current_level;
+        /* The primary block remains at 'block'. */
+    }
 }
 
-/*
-   TODO Try inplace growth-shrink
-*/
-void *realloc(void *ptr, size_t size) {
-    if (!ptr)
-        return __bootstrap_malloc(size);
+void *buddy_realloc(void *ptr, size_t size) {
+    if (ptr == nullptr)
+        return MemoryAllocate(size);
     if (size == 0) {
-        __bootstrap_free(ptr);
+        MemoryFree(ptr);
         return nullptr;
     }
-    struct BlockHeader *header = (struct BlockHeader*)((char*)ptr - sizeof(struct BlockHeader));
-    int level = header->level;
-    size_t old_block_size = block_size(level) - sizeof(struct BlockHeader);
     
-    void *new_ptr = __bootstrap_malloc(size);
+    struct BlockHeader *header = (struct BlockHeader*)((char*)ptr - sizeof(struct BlockHeader));
+    int current_level = header->level;
+    size_t current_usable = block_size(current_level) - sizeof(struct BlockHeader);
+    size_t new_total = size + sizeof(struct BlockHeader);
+    
+    int required_level = -1;
+    for (int L = NUM_LEVELS - 1; L >= 0; L--) {
+        if (block_size(L) >= new_total) {
+            required_level = L;
+            break;
+        }
+    }
+    if (required_level < 0)
+        return nullptr;  /* Requested size too large. */
+    
+    /* If the current block is large enough for the new request... */
+    if (new_total <= block_size(current_level)) {
+        /* For shrinkage, if the target level is higher (meaning a smaller block),
+         * perform an in-place split.
+         */
+        if (required_level > current_level) {
+            buddy_shrink((void*)header, current_level, required_level);
+        }
+        return ptr;
+    }
+    
+    /* Otherwise, for growth, allocate a new block, copy the data, then free the old block. */
+    void *new_ptr = MemoryAllocate(size);
     if (new_ptr) {
-        /* Copy the minimum of the old block size and the new size */
-        size_t copy_size = (old_block_size < size) ? old_block_size : size;
+        size_t copy_size = (current_usable < size) ? current_usable : size;
         __builtin_memcpy(new_ptr, ptr, copy_size);
     }
-    __bootstrap_free(ptr);
+    MemoryFree(ptr);
     return new_ptr;
 }

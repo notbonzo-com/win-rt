@@ -21,12 +21,12 @@ LONG WINAPI __C_specific_handler(
         return C_specific_handler(ExceptionRecord, EstablisherFrame, ContextRecord, DispatcherContext);
     }
 
-    PLDR_DATA_TABLE_ENTRY ntdll_module = __bootstrap_find_module(NTDLL_HASH);
+    PLDR_DATA_TABLE_ENTRY ntdll_module = FindInMemoryModuleByHash(NTDLL_HASH);
     if (!ntdll_module) {
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
-    C_specific_handler = (CSpecificHandler_t)__bootstrap_get_export(ntdll_module, __C_specific_handler_HASH);
+    C_specific_handler = (CSpecificHandler_t)FindExportByHash(ntdll_module, __C_specific_handler_HASH);
     
     if (!C_specific_handler) {
         return EXCEPTION_CONTINUE_SEARCH;

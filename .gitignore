@@ -2,3 +2,5 @@ build
 .cache
 program.exe
 winrt.lib
+runtime/hash/**.h
+compile_commands.json

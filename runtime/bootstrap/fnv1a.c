@@ -2,7 +2,7 @@
 #define FNV_OFFSET_BASIS_64 0xcbf29ce484222325ULL
 #define FNV_PRIME_64 0x100000001b3ULL
 
-unsigned long long __bootstrap_fnv1a_hash(const char *s) {
+unsigned long long fnv1aHash(const char *s) {
     unsigned long long hash = FNV_OFFSET_BASIS_64;
 
     while (*s) {
@@ -15,7 +15,7 @@ unsigned long long __bootstrap_fnv1a_hash(const char *s) {
     return hash;
 }
 
-unsigned long long __bootstrap_fnv1a_whash(const __WCHAR_TYPE__ *s) {
+unsigned long long fnv1aWideHash(const __WCHAR_TYPE__ *s) {
     unsigned long long hash = FNV_OFFSET_BASIS_64;
 
     while (*s) {

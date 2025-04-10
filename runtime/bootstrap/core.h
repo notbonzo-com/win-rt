@@ -1,5 +1,5 @@
-#ifndef __BOOTSTRAP_H
-#define __BOOTSTRAP_H
+#ifndef CORE_H
+#define CORE_H
 
 #include <windows.h>
 
@@ -7,18 +7,18 @@
 extern "C" {
 #endif
 
-void *__bootstrap_malloc(size_t size);
-void __bootstrap_free(void *ptr);
-void *__bootstrap_realloc(void *ptr, size_t size);
+void *MemoryAllocate(size_t size);
+void MemoryFree(void *ptr);
+void *MemoryReallocate(void *ptr, size_t size);
 
-unsigned long long __bootstrap_fnv1a_hash(const char *s);
-unsigned long long __bootstrap_fnv1a_whash(const __WCHAR_TYPE__ *s);
+unsigned long long fnv1aHash(const char *s);
+unsigned long long fnv1aWideHash(const __WCHAR_TYPE__ *s);
 
-PLDR_DATA_TABLE_ENTRY __bootstrap_find_module(unsigned long long target_hash);
-PVOID __bootstrap_get_export(PLDR_DATA_TABLE_ENTRY module, unsigned long long target_hash);
+PLDR_DATA_TABLE_ENTRY FindInMemoryModuleByHash(unsigned long long target_hash);
+PVOID FindExportByHash(PLDR_DATA_TABLE_ENTRY module, unsigned long long target_hash);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // __BOOTSTRAP_H
+#endif // CORE_H
