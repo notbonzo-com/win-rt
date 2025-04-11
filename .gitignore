@@ -4,3 +4,4 @@ program.exe
 winrt.lib
 runtime/hash/**.h
 compile_commands.json
+temp.json

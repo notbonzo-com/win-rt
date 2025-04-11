@@ -1,203 +1,235 @@
+#include "core.h"
+#include "dbgio.h"
+#include "windows.h"
 #include <windows.h>
+#include <winifnc.h>
+#include <hash/ntdll.h>
+#include <stdlib.h>
+#include <string.h>
 
-#define REGION_BITS 20       /* 1 MiB region (2^20) */
-#define MIN_BLOCK_BITS 5     /* 32 bytes (2^5) */
-#define BUDDY_REGION_SIZE (1 << REGION_BITS)
-#define MIN_BLOCK_SIZE (1 << MIN_BLOCK_BITS)
-#define NUM_LEVELS (REGION_BITS - MIN_BLOCK_BITS + 1)
+#define ALIGNMENT               8
+#define DEFAULT_SEGMENT_SIZE   (64 * 1024)
 
-struct FreeBlock {
-    struct FreeBlock *next;
-};
+typedef struct BlockHeader {
+    size_t size;
+    int free;
+    struct BlockHeader *next;
+    struct BlockHeader *prev;
+} BlockHeader;
 
-struct BlockHeader {
-    unsigned int level;
-};
+typedef struct HeapSegment {
+    struct HeapSegment *next;
+    size_t size;
+    BlockHeader *first_block;
+} HeapSegment;
 
-static char buddy_region[BUDDY_REGION_SIZE];
-static struct FreeBlock *freeLists[NUM_LEVELS];
-static int initialized = 0;
+static HeapSegment *heap_segments = NULL;
 
-static size_t block_size(int level) {
-    return BUDDY_REGION_SIZE >> level;
+static size_t align_size(size_t size) {
+    return (size + (ALIGNMENT - 1)) & ~(ALIGNMENT - 1);
 }
 
-static void buddy_init(void) {
-    for (int i = 0; i < NUM_LEVELS; i++) {
-        freeLists[i] = nullptr;
+static HeapSegment* allocate_segment(size_t seg_size) {
+    SIZE_T regionSize = seg_size;
+    void *base = NULL;
+    ULONGLONG args[6];
+    args[0] = (ULONGLONG)NtCurrentProcess();
+    args[1] = (ULONGLONG)&base;
+    args[2] = 0;
+    args[3] = (ULONGLONG)&regionSize;
+    args[4] = MEM_RESERVE | MEM_COMMIT;
+    args[5] = PAGE_READWRITE;
+    
+#if 0
+    NTSTATUS (*NtAllocateVirtualMemory)(
+        HANDLE ProcessHandle,      // value
+        PVOID *BaseAddress,        // ← double pointer!
+        ULONG ZeroBits,            // value
+        PSIZE_T RegionSize,        // ← pointer!
+        ULONG AllocationType,      // value
+        ULONG Protect              // value
+    ) = FindExportByHash(FindInMemoryModuleByHash(NTDLL_HASH), NtAllocateVirtualMemory_HASH);
+    
+    NTSTATUS status = NtAllocateVirtualMemory(NtCurrentProcess(), &base, 0, &regionSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+#endif
+    NTSTATUS status = CallSyscall(NtAllocateVirtualMemory_HASH, args);
+    if (!NT_SUCCESS(status)) {
+        /* dies here */
+        dbgio_printf("NtAllocateVirtualMemory failed: 0x%llx\n", status);
+        __debugbreak();
+        return NULL;
     }
-    freeLists[0] = (struct FreeBlock*)buddy_region;
-    freeLists[0]->next = nullptr;
-    initialized = 1;
+    
+    HeapSegment *seg = (HeapSegment*) base;
+    seg->next = NULL;
+    seg->size = regionSize;
+    BlockHeader *block = (BlockHeader*)((char*)base + sizeof(HeapSegment));
+    block->size = regionSize - sizeof(HeapSegment);
+    block->free = 1;
+    block->next = NULL;
+    block->prev = NULL;
+    seg->first_block = block;
+    
+    return seg;
 }
 
-static void buddy_free_iter(void *addr, int level) {
-    char *base = buddy_region;
-    size_t bs;
-    size_t offset, buddy_offset;
-    void *buddy_addr;
-
-    while (1) {
-        if (level == 0)
-            break;  /* Cannot merge further than the full region. */
-        bs = block_size(level);
-        offset = (char*)addr - base;
-        buddy_offset = offset ^ bs;
-        buddy_addr = base + buddy_offset;
-
-        /* Search for the buddy in freeLists[level]. */
-        struct FreeBlock **prev = &freeLists[level];
-        struct FreeBlock *curr = freeLists[level];
-        while (curr) {
-            if ((void*)curr == buddy_addr)
-                break;
-            prev = &curr->next;
-            curr = curr->next;
+static BlockHeader* find_free_block(size_t total_size) {
+    HeapSegment *seg = heap_segments;
+    while (seg) {
+        BlockHeader *blk = seg->first_block;
+        while (blk) {
+            if (blk->free && blk->size >= total_size)
+                return blk;
+            blk = blk->next;
         }
-        if (!curr)
-            break;  /* Buddy is not free; merging stops. */
-
-        /* Remove the buddy block from the free list. */
-        *prev = curr->next;
-
-        /* Select the lower address to represent the merged block. */
-        if (offset > buddy_offset) {
-            addr = buddy_addr;
-        }
-        /* Move up one level (i.e. merge to form a larger block). */
-        level--;
+        seg = seg->next;
     }
-    /* Insert the (merged) block into the appropriate free list. */
-    struct FreeBlock *block = (struct FreeBlock*)addr;
-    block->next = freeLists[level];
-    freeLists[level] = block;
+    return NULL;
+}
+
+static void split_block(BlockHeader *blk, size_t total_size) {
+    if (blk->size >= total_size + sizeof(BlockHeader) + ALIGNMENT) {
+        BlockHeader *new_blk = (BlockHeader*)((char*)blk + total_size);
+        new_blk->size = blk->size - total_size;
+        new_blk->free = 1;
+        new_blk->next = blk->next;
+        new_blk->prev = blk;
+        if (blk->next)
+            blk->next->prev = new_blk;
+        blk->next = new_blk;
+        blk->size = total_size;
+    }
+}
+
+void *MemoryAllocate(size_t size) {
+    if (size == 0)
+        return NULL;
+    
+    size_t aligned_size = align_size(size);
+    size_t total_size = aligned_size + sizeof(BlockHeader);
+    
+    BlockHeader *blk = find_free_block(total_size);
+    if (!blk) {
+        size_t seg_size = (total_size + sizeof(HeapSegment) > DEFAULT_SEGMENT_SIZE) ? 
+                          (total_size + sizeof(HeapSegment)) : DEFAULT_SEGMENT_SIZE;
+        HeapSegment *new_seg = allocate_segment(seg_size);
+        if (!new_seg)
+            return NULL;
+        new_seg->next = heap_segments;
+        heap_segments = new_seg;
+        blk = new_seg->first_block;
+    }
+    
+    split_block(blk, total_size);
+    blk->free = 0;
+    
+    return (void *)((char*)blk + sizeof(BlockHeader));
+}
+
+static void coalesce(BlockHeader *blk) {
+    if (blk->next && blk->next->free) {
+        blk->size += blk->next->size;
+        blk->next = blk->next->next;
+        if (blk->next)
+            blk->next->prev = blk;
+    }
+    
+    if (blk->prev && blk->prev->free) {
+        blk->prev->size += blk->size;
+        blk->prev->next = blk->next;
+        if (blk->next)
+            blk->next->prev = blk->prev;
+        blk = blk->prev;
+    }
 }
 
 void MemoryFree(void *ptr) {
     if (!ptr)
         return;
-    struct BlockHeader *header = (struct BlockHeader*)((char*)ptr - sizeof(struct BlockHeader));
-
-    int level = header->level;
-    void *block_addr = (void*)header;
-    buddy_free_iter(block_addr, level);
-}
-
-static void *buddy_alloc_level(int desired_level) {
-    int i;
-    for (i = 0; i <= desired_level; i++) {
-        if (freeLists[i] != nullptr)
-            break;
-    }
-    if (i > desired_level)
-        return nullptr;  /* No sufficiently large block available. */
     
-    /* Split blocks until reaching the desired level. */
-    while (i < desired_level) {
-        struct FreeBlock *block = freeLists[i];
-        freeLists[i] = block->next;
-        size_t bs = block_size(i + 1);
-        /* Split the block into two buddies. */
-        struct FreeBlock *buddy1 = block;
-        struct FreeBlock *buddy2 = (struct FreeBlock*)((char*)block + bs);
-        /* Insert both buddies into the next free list. */
-        buddy1->next = freeLists[i + 1];
-        freeLists[i + 1] = buddy1;
-        buddy2->next = freeLists[i + 1];
-        freeLists[i + 1] = buddy2;
-        i++;
-    }
-    /* Remove and return a block at the desired level. */
-    struct FreeBlock *block = freeLists[desired_level];
-    if (block) {
-        freeLists[desired_level] = block->next;
-        return block;
-    }
-    return nullptr;
-}
-
-void *MemoryAllocate(size_t size) {
-    if (size == 0)
-        return nullptr;
-    if (!initialized)
-        buddy_init();
-
-    /* Compute total block size needed (user size + header). */
-    size_t total_size = size + sizeof(struct BlockHeader);
-    int level = -1;
-    /* Find the smallest level (i.e. smallest block) where the block size is sufficient. */
-    for (int L = NUM_LEVELS - 1; L >= 0; L--) {
-        if (block_size(L) >= total_size) {
-            level = L;
+    BlockHeader *blk = (BlockHeader*)((char*)ptr - sizeof(BlockHeader));
+    blk->free = 1;
+    coalesce(blk);
+    
+    HeapSegment *prev_seg = NULL;
+    HeapSegment *seg = heap_segments;
+    while (seg) {
+        if ((char*)blk >= (char*)seg && (char*)blk < (char*)seg + seg->size) {
+            BlockHeader *first = seg->first_block;
+            if (first->free && first->prev == NULL &&
+                first->next == NULL &&
+                first->size == seg->size - sizeof(HeapSegment))
+            {
+                if (prev_seg)
+                    prev_seg->next = seg->next;
+                else
+                    heap_segments = seg->next;
+                
+                SIZE_T regionSize = seg->size;
+                ULONGLONG args[4];
+                void *base = seg;
+                args[0] = (ULONGLONG)NtCurrentProcess();
+                args[1] = (ULONGLONG)&base;
+                args[2] = (ULONGLONG)&regionSize;
+                args[3] = MEM_RELEASE;
+                NTSTATUS status = CallSyscall(NtFreeVirtualMemory_HASH, args);
+                if (!NT_SUCCESS(status)) {
+                    /* todo error */
+                }
+            }
             break;
         }
-    }
-    if (level < 0)
-        return nullptr;  /* Request too large. */
-
-    void *block = buddy_alloc_level(level);
-    if (!block)
-        return nullptr;
-
-    /* Initialize header and return a pointer past the header. */
-    struct BlockHeader *header = (struct BlockHeader*)block;
-    header->level = level;
-    return (void*)((char*)block + sizeof(struct BlockHeader));
-}
-
-static void buddy_shrink(void *block, int current_level, int target_level) {
-    struct BlockHeader *header = (struct BlockHeader*)block;
-    while (current_level < target_level) {
-        size_t bs = block_size(current_level + 1);
-        void *buddy_addr = (void*)((char*)block + bs);
-        /* Free the buddy block (which is now not in use). */
-        buddy_free_iter(buddy_addr, current_level + 1);
-        current_level++;
-        header->level = current_level;
-        /* The primary block remains at 'block'. */
+        prev_seg = seg;
+        seg = seg->next;
     }
 }
 
-void *buddy_realloc(void *ptr, size_t size) {
-    if (ptr == nullptr)
+void *MemoryReallocate(void *ptr, size_t size) {
+    if (ptr == NULL)
         return MemoryAllocate(size);
     if (size == 0) {
         MemoryFree(ptr);
-        return nullptr;
+        return NULL;
     }
     
-    struct BlockHeader *header = (struct BlockHeader*)((char*)ptr - sizeof(struct BlockHeader));
-    int current_level = header->level;
-    size_t current_usable = block_size(current_level) - sizeof(struct BlockHeader);
-    size_t new_total = size + sizeof(struct BlockHeader);
+    BlockHeader *blk = (BlockHeader*)((char*)ptr - sizeof(BlockHeader));
+    size_t aligned_size = align_size(size);
+    size_t total_size = aligned_size + sizeof(BlockHeader);
     
-    int required_level = -1;
-    for (int L = NUM_LEVELS - 1; L >= 0; L--) {
-        if (block_size(L) >= new_total) {
-            required_level = L;
-            break;
-        }
-    }
-    if (required_level < 0)
-        return nullptr;  /* Requested size too large. */
-    
-    /* If the current block is large enough for the new request... */
-    if (new_total <= block_size(current_level)) {
-        /* For shrinkage, if the target level is higher (meaning a smaller block),
-         * perform an in-place split.
-         */
-        if (required_level > current_level) {
-            buddy_shrink((void*)header, current_level, required_level);
-        }
+    if (blk->size >= total_size) {
+        split_block(blk, total_size);
         return ptr;
     }
     
-    /* Otherwise, for growth, allocate a new block, copy the data, then free the old block. */
     void *new_ptr = MemoryAllocate(size);
     if (new_ptr) {
-        size_t copy_size = (current_usable < size) ? current_usable : size;
-        __builtin_memcpy(new_ptr, ptr, copy_size);
+        size_t copy_size = blk->size - sizeof(BlockHeader);
+        if (copy_size > size)
+            copy_size = size;
+        memcpy(new_ptr, ptr, copy_size);
+        MemoryFree(ptr);
     }
-    MemoryFree(ptr);
+    
     return new_ptr;
+}
+
+
+void HeapDestroy(void) {
+    HeapSegment *seg = heap_segments;
+    while (seg) {
+        HeapSegment *next = seg->next;
+        SIZE_T regionSize = seg->size;
+        ULONGLONG args[4];
+        void *base = seg;
+        args[0] = (ULONGLONG)NtCurrentProcess();
+        args[1] = (ULONGLONG)&base;
+        args[2] = (ULONGLONG)&regionSize;
+        args[3] = MEM_RELEASE;
+        NTSTATUS status = CallSyscall(NtFreeVirtualMemory_HASH, args);
+        if (!NT_SUCCESS(status)) {
+            /* todo error */
+        }
+        seg = next;
+    }
+    heap_segments = NULL;
 }

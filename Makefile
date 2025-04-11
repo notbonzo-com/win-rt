@@ -1,97 +1,82 @@
-ifeq ($(OS),Windows_NT)
-    CLEAR         = cls
-    MKDIR         = mkdir
-    RM_DIR        = rmdir /S /Q
-    RM_FILE       = del /Q
+LOG_CC = test -f compile_commands.json || echo '[' > compile_commands.json; \
+         echo '{ "directory": "$(shell pwd)", "command": "$(CC) $(CFLAGS) -c $< -o $@", "file": "$<" },' >> compile_commands.json
 
-    C_SRCS        := $(shell dir /S /B runtime\*.c tests\*.c 2>NUL)
-    ASM_SRCS      := $(shell dir /S /B runtime\*.asm tests\*.asm 2>NUL)
-    HASHREC_SRCS  := $(shell dir /S /B runtime\*.hashrec tests\*.hashrec 2>NUL)
+CC = clang-cl
+ASM = nasm
 
-    BUILD_SUBDIRS = $(BUILD_DIR)
+TARGET = x86_64-w64-mingw32
+ARCH = x86_64
 
-    run:
-	    @echo "------------"
-	    @$(OUT)
-	    @echo "------------"
-
-else
-    CLEAR         = clear
-    MKDIR         = mkdir -p
-    RM            = rm -rf
-	
-    C_SRCS        = $(shell find $(SRC_DIRS) -type f -name "*.c")
-    ASM_SRCS      = $(shell find $(SRC_DIRS) -type f -name "*.asm")
-    HASHREC_SRCS  = $(shell find $(SRC_DIRS) -type f -name "*.hashrec")
-
-    BUILD_SUBDIRS = $(shell find $(SRC_DIRS) -type d | sed 's|^|$(BUILD_DIR)/|')
-
-    run:
-	    @echo "------------"
-	    @wine $(OUT)
-	    @echo "------------"
-endif
-
-CC       = clang-cl
-ASM      = nasm
-LD       = lld-link
-
-TARGET   = x86_64-w64-mingw32
-ARCH     = x86_64
+LD = lld-link
 
 SRC_DIRS = runtime tests
 BUILD_DIR = $(abspath build)
-OUT      = program.exe
+OUT = program.exe
 
-CFLAGS   = /D_CRT_SECURE_NO_WARNINGS /nologo /c /GS- /W3 /Oi /O2 /Zc:inline /Zc:forScope /FC /EHa /GR- /clang:-std=c23 /I runtime
+CFLAGS = /D_CRT_SECURE_NO_WARNINGS /nologo /c /GS- /W3 /Oi /O2 /Zc:inline /Zc:forScope /FC /EHa /GR- /clang:-std=c23 /I runtime
 ASMFLAGS = -f win64
 
-LDFLAGS  = /SUBSYSTEM:CONSOLE \
-           /ENTRY:_start \
-           /BASE:0x400000 \
-           /NODEFAULTLIB \
-           /NOLOGO
+LDFLAGS = /SUBSYSTEM:CONSOLE \
+          /ENTRY:_start \
+          /BASE:0x400000 \
+          /NODEFAULTLIB \
+          /NOLOGO
+
+C_SRCS = $(shell find $(SRC_DIRS) -type f -name "*.c")
+ASM_SRCS = $(shell find $(SRC_DIRS) -type f -name "*.asm")
+HASHREC_SRCS = $(shell find $(SRC_DIRS) -type f -name "*.hashrec")
 
 OBJS = $(patsubst %,$(BUILD_DIR)/%,$(C_SRCS:.c=.obj)) \
        $(patsubst %,$(BUILD_DIR)/%,$(ASM_SRCS:.asm=.obj))
 
 HASHREC_HEADERS = $(patsubst %.hashrec,%.h,$(HASHREC_SRCS))
 
-all: $(BUILD_DIR) $(HASHREC_HEADERS) $(OUT) run
+BUILD_SUBDIRS = $(shell find $(SRC_DIRS) -type d | sed 's|^|$(BUILD_DIR)/|')
+
+all: $(BUILD_DIR) $(HASHREC_HEADERS) $(OUT) fix_compile_commands run
 	@echo "✅ Build complete: $(OUT)"
 
 $(BUILD_DIR):
 	@echo "📂 Creating build directories..."
-	@$(MKDIR) $(BUILD_SUBDIRS)
+	@mkdir -p $(BUILD_SUBDIRS)
 
 %.h: %.hashrec parse_hashrec.py
 	@echo "📜 Parsing $< -> $@"
 	@python3 parse_hashrec.py $< $@
+
 $(BUILD_DIR)/%.obj: %.c | $(BUILD_DIR)
 	@echo "🔨 Compiling C: $<"
-	@$(MKDIR) $(dir $@)
+	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) /Fo$@ $<
 	@$(LOG_CC)
 
 $(BUILD_DIR)/%.obj: %.asm | $(BUILD_DIR)
 	@echo "🛠️  Assembling: $<"
-	@$(MKDIR) $(dir $@)
+	@mkdir -p $(dir $@)
 	@$(ASM) $(ASMFLAGS) -o $@ $<
 
 $(OUT): $(OBJS)
 	@echo "🔗 Linking with LLD: $(OUT)"
 	@$(LD) $(LDFLAGS) /OUT:$@ $^
 
+fix_compile_commands:
+	@echo "🔧 Fixing compile_commands.json formatting..."
+	@sed -i '$$ s/,$$//' compile_commands.json
+	@echo "]" >> compile_commands.json
+
 clean:
-	@$(CLEAR)
+	@clear
 	@echo "🧹 Cleaning up..."
-ifeq ($(OS),Windows_NT)
-	@$(RM_DIR) $(BUILD_DIR)
-	@$(RM_FILE) $(OUT) $(HASHREC_HEADERS)
-else
-	@$(RM) $(BUILD_DIR) $(OUT) $(HASHREC_HEADERS)
-endif
+	@rm -rf $(BUILD_DIR) $(OUT) $(HASHREC_HEADERS) compile_commands.json
 
 reset: clean all
 
-.PHONY: all clean reset run
+run:
+	@echo "------------"
+	@wine $(OUT)
+	@echo "------------"
+
+objdump:
+	@x86_64-w64-mingw32-objdump -x $(OUT)
+
+.PHONY: all clean objdump reset run fix_compile_commands

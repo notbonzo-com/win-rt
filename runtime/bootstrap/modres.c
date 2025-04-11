@@ -1,6 +1,10 @@
 #include <bootstrap/core.h>
+#include <bootstrap/bytepattern.h>
+#include <bootstrap/syscalltable.h>
+#include <hash/ntdll.h>
 #include <windows.h>
 #include <winifnc.h>
+#include <stdarg.h>
 
 PLDR_DATA_TABLE_ENTRY FindInMemoryModuleByHash(unsigned long long target_hash) {
     PPEB pPeb = NtCurrentPeb();
@@ -70,4 +74,88 @@ PVOID FindExportByHash(PLDR_DATA_TABLE_ENTRY module, unsigned long long target_h
         }
     }
     return nullptr;
+}
+
+int ExtractSyscallFromNativeStub(PVOID function) {
+    const BYTE* bytes = (const BYTE*)function;
+
+    BOOL matched = BYTEPATTERN_MATCH(
+        bytes,
+        0x4C, 0x8B, 0xD1,                               // mov r10, rcx
+        0xB8, 0x100, 0x100, 0x100, 0x100                // mov eax, imm32
+    );
+
+    if (!matched)
+        return -1;
+    
+    return *(const int*)(bytes + 4);
+}
+
+SyscallEntry g_SyscallTable[SYSCALL_TABLE_MAX] = {0};
+int g_SyscallCount = 0;
+
+int ResolveSyscallTable(PLDR_DATA_TABLE_ENTRY ntdll) {
+    static const ULONGLONG g_SyscallHashList[] = {
+        NtAllocateVirtualMemory_HASH,
+        NtFreeVirtualMemory_HASH,
+        NtProtectVirtualMemory_HASH,
+        NtReadVirtualMemory_HASH,
+        NtWriteVirtualMemory_HASH,
+        NtCreateFile_HASH,
+        NtOpenFile_HASH,
+        NtReadFile_HASH,
+        NtWriteFile_HASH,
+        NtClose_HASH,
+        NtQueryInformationFile_HASH,
+        NtCreateProcessEx_HASH,
+        NtCreateThreadEx_HASH,
+        NtQueryInformationProcess_HASH,
+        NtOpenProcess_HASH,
+        NtOpenThread_HASH,
+        NtTerminateProcess_HASH,
+        NtDelayExecution_HASH,
+        NtQueryPerformanceCounter_HASH,
+        NtYieldExecution_HASH,
+        NtQuerySystemInformation_HASH,
+        NtGetContextThread_HASH,
+        NtSetContextThread_HASH,
+        NtResumeThread_HASH,
+        NtSuspendThread_HASH
+    };
+
+    for (int i = 0; i < sizeof(g_SyscallHashList) / sizeof(g_SyscallHashList[0]); ++i) {
+        uint64_t hash = g_SyscallHashList[i];
+        void *func = FindExportByHash(ntdll, hash);
+        if (!func)
+            return -1;
+
+        int syscall_number = ExtractSyscallFromNativeStub(func);
+        if (syscall_number < 0)
+            return -2;
+
+        g_SyscallTable[g_SyscallCount++] = (SyscallEntry){
+            .hash = hash,
+            .syscall_number = (uint32_t)syscall_number
+        };
+
+        if (g_SyscallCount >= SYSCALL_TABLE_MAX)
+            return -3;
+    }
+
+    return 0;
+}
+
+extern int nt_syscall(uint32_t syscall_number, ULONGLONG *args, int arg_count);
+
+int CallSyscallEx(ULONGLONG hash, ULONGLONG *args, int count)
+{
+    int syscall_number = -1;
+    for (int i = 0; i < g_SyscallCount; ++i) {
+        if (g_SyscallTable[i].hash == hash)
+            syscall_number = g_SyscallTable[i].syscall_number;
+    }
+    if (syscall_number < 0) 
+        return -1;
+
+    return nt_syscall((uint32_t)syscall_number, args, count);
 }

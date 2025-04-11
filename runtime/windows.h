@@ -115,7 +115,7 @@ typedef HANDLE*                 PHANDLE;
 
 typedef int(* FARPROC) ();
 
-#define NT_SUCCESS(Status) ((NTSTATUS)(Status) != 0)
+#define NT_SUCCESS(Status) ((NTSTATUS)(Status) >= 0)
 #define NtCurrentProcess() 	   ( (HANDLE)(LONG_PTR)-1 )
 #define NtCurrentThread() 	   ( (HANDLE)(LONG_PTR)-2 )
 #define ZwCurrentProcess() 	   NtCurrentProcess()
@@ -195,6 +195,22 @@ typedef int(* FARPROC) ();
 #define EXCEPTION_PRIV_INSTRUCTION          0xC0000096      // Privileged instruction
 #define EXCEPTION_SINGLE_STEP               0x80000004      // Debug single-step trap
 #define EXCEPTION_STACK_OVERFLOW            0xC00000FD      // Stack overflow
+
+#define MEM_COMMIT 0x00001000
+#define MEM_RESERVE 0x00002000
+#define MEM_RESET 0x00080000
+#define MEM_RESET_UNDO 0x1000000
+
+#define MEM_LARGE_PAGES 0x20000000
+#define MEM_PHYSICAL 0x00400000
+#define MEM_TOP_DOWN 0x00100000
+#define MEM_WRITE_WATCH 0x00200000
+
+#define MEM_DECOMMIT 0x00004000
+#define MEM_RELEASE 0x00008000
+
+#define MEM_COALESCE_PLACEHOLDERS 0x00000001
+#define MEM_PRESERVE_PLACEHOLDER 0x00000002
 
 #define IMAGE_FILE_EXECUTABLE_IMAGE   0x0002
 #define LDRP_IMAGE_DLL   0x00000004
@@ -2791,9 +2807,10 @@ typedef struct _PEB {
     ULONGLONG ExtendedFeatureDisableMask;
 } PEB, *PPEB;
 
-FARPROC WINAPI GetProcAddress(HINSTANCE hModule, LPCSTR lpProcName);
-DWORD BaseSetLastNTError( _In_ NTSTATUS Status );
-PVOID WINAPI BasepMapModuleHandle(HMODULE hModule, BOOLEAN AsDataFile);
+int CallSyscallEx(ULONGLONG hash, ULONGLONG *args, int count);
+
+#define CallSyscall(syscall_hash, args) \
+    CallSyscallEx((syscall_hash), (args), sizeof(args) / sizeof((args)[0]))
 
 #ifdef __cplusplus
 }
