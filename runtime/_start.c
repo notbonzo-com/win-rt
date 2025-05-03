@@ -1,4 +1,3 @@
-#include "dbgio.h"
 #include <bootstrap/core.h>
 #include <winifnc.h>
 #include <windows.h>
@@ -15,13 +14,6 @@ int _start() {
     if ((status = ResolveSyscallTable(ntdll)) != 0)
         return status;
 
-    dbgio_printf("Hello World\n");
-    
-    void* ptr = MemoryAllocate(sizeof("Hello World 2\n") + 1);
-    strcpy(ptr, "Hello World 2\n");
-    dbgio_printf("Str: %s", ptr);
-    MemoryFree(ptr);
-    
     status = main(0, nullptr);
 
     return status; /* You can return into RtlUserThreadStart */

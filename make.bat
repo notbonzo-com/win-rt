@@ -12,7 +12,7 @@ set "OUT=program.exe"
 
 set "RUNTIME_DIR=%CD%\runtime"
 set "RUNTIME_DIR=!RUNTIME_DIR:\=\\!"
-set "CFLAGS=/D_CRT_SECURE_NO_WARNINGS /nologo /c /GS- /W3 /Oi /O2 /Zc:inline /Zc:forScope /FC /EHa /GR- /clang:-std=c23 /I !RUNTIME_DIR!"
+set "CFLAGS=/D_CRT_SECURE_NO_WARNINGS /nologo /c /GS- /W3 /Oi /O2 /Zc:inline /Zc:forScope /FC /EHa /GR- /DGUI_APP /clang:-std=c23 /I !RUNTIME_DIR!"
 set "ASMFLAGS=-f win64"
 set "LDFLAGS=/SUBSYSTEM:CONSOLE /ENTRY:_start /BASE:0x400000 /NODEFAULTLIB /NOLOGO"
 
@@ -52,7 +52,7 @@ for /R "runtime" %%F in (*.hashrec) do (
     set "header=%%F"
     set "header=!header:.hashrec=.h!"
     echo [Parsing] %%F -> !header!
-    python parse_hashrec.py "%%F" "!header!"
+    py parse_hashrec.py "%%F" "!header!"
 )
 
 for /R "runtime" %%F in (*.c) do (

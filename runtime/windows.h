@@ -73,6 +73,7 @@ typedef ULONGLONG               ULONG64;
 typedef void*                   PVOID;
 typedef const void*             PCVOID;
 typedef PVOID                   HANDLE;
+typedef LONG*                   PLONG;
 typedef char*                   LPSTR;
 typedef char*                   PCHAR;
 typedef const char*             LPCSTR;
@@ -97,6 +98,9 @@ typedef const char*             PCSZ;
 typedef DWORD                   DWORD_PTR;
 typedef ULONGLONG*              PULONG_PTR;
 typedef DWORD*                  PDWORD;
+typedef PDWORD                  LPDWORD;
+typedef UCHAR*                  PUCHAR;
+typedef ULONGLONG               UINT_PTR;
 
 typedef unsigned char           BOOLEAN;
 
@@ -105,13 +109,29 @@ typedef DWORD                   LCID;
 typedef ULONGLONG               SIZE_T;
 typedef DWORD                   ACCESS_MASK;
 typedef ACCESS_MASK*            PACCESS_MASK;
+typedef DWORD                   COLORREF;
 
+typedef unsigned short RTL_ATOM, *PRTL_ATOM;
 typedef HANDLE                  HMODULE;
 typedef HANDLE                  HINSTANCE;
 typedef HANDLE                  HLOCAL;
 typedef HANDLE                  HGLOBAL;
 typedef HANDLE                  HRSRC;
+typedef HANDLE                  HWND;
+typedef HANDLE                  HMENU;
+typedef HANDLE                  HDC;
+typedef HANDLE                  HBRUSH;
+typedef HANDLE                  HICON;
+typedef HANDLE                  HRGN;
+typedef HICON                   HCURSOR;
 typedef HANDLE*                 PHANDLE;
+
+typedef PVOID                   LPVOID;
+typedef UINT_PTR                WPARAM;
+typedef LONG_PTR                LPARAM;
+typedef LONG_PTR                LRESULT;
+
+typedef LRESULT(*WNDPROC)(HWND,UINT,WPARAM,LPARAM);
 
 typedef int(* FARPROC) ();
 
@@ -120,7 +140,6 @@ typedef int(* FARPROC) ();
 #define NtCurrentThread() 	   ( (HANDLE)(LONG_PTR)-2 )
 #define ZwCurrentProcess() 	   NtCurrentProcess()
 #define ZwCurrentThread() 	   NtCurrentThread()
-#ifndef InitializeObjectAttributes
 #define InitializeObjectAttributes( p, n, a, r, s ) { \
     (p)->Length = sizeof(OBJECT_ATTRIBUTES); \
     (p)->RootDirectory = r; \
@@ -129,12 +148,12 @@ typedef int(* FARPROC) ();
     (p)->SecurityDescriptor = s; \
     (p)->SecurityQualityOfService = nullptr; \
 }
-#endif
 
 #define _In_ 
 #define _Inout_
 #define _In_opt_
 #define _Out_
+#define _Out_opt_
 #define GDI_BATCH_BUFFER_SIZE 310
 #define UNICODE_NULL L'\0'
 #define ANSI_NULL '\0'
@@ -158,6 +177,53 @@ typedef int(* FARPROC) ();
 #define USHRT_MAX   0xffff
 #define MAXUSHORT   (ULONG_PTR)USHRT_MAX
 #define ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION 2
+
+#define WS_OVERLAPPED       0x00000000L
+#define WS_CAPTION          0x00C00000L     // WS_BORDER | WS_DLGFRAME
+#define WS_SYSMENU          0x00080000L
+#define WS_THICKFRAME       0x00040000L
+#define WS_MINIMIZEBOX      0x00020000L
+#define WS_MAXIMIZEBOX      0x00010000L
+
+#define WS_OVERLAPPEDWINDOW (WS_OVERLAPPED     | \
+                             WS_CAPTION        | \
+                             WS_SYSMENU        | \
+                             WS_THICKFRAME     | \
+                             WS_MINIMIZEBOX    | \
+                             WS_MAXIMIZEBOX)
+
+#define WM_DESTROY 0x0002
+#define WM_PAINT 0x000F
+
+#define TOKEN_ASSIGN_PRIMARY    (0x0001)
+#define TOKEN_DUPLICATE         (0x0002)
+#define TOKEN_IMPERSONATE       (0x0004)
+#define TOKEN_QUERY             (0x0008)
+#define TOKEN_QUERY_SOURCE      (0x0010)
+#define TOKEN_ADJUST_PRIVILEGES (0x0020)
+#define TOKEN_ADJUST_GROUPS     (0x0040)
+#define TOKEN_ADJUST_DEFAULT    (0x0080)
+#define TOKEN_ADJUST_SESSIONID  (0x0100)
+
+#define OBJ_KERNEL_HANDLE                   0x00000200L
+
+#define SECURITY_MANDATORY_UNTRUSTED_RID            (0x00000000)
+#define SECURITY_MANDATORY_LOW_RID                  (0x00001000)
+#define SECURITY_MANDATORY_MEDIUM_RID               (0x00002000)
+#define SECURITY_MANDATORY_MEDIUM_PLUS_RID          (SECURITY_MANDATORY_MEDIUM_RID + 0x100) // 0x2100
+#define SECURITY_MANDATORY_HIGH_RID                 (0x00003000)
+#define SECURITY_MANDATORY_SYSTEM_RID               (0x00004000)
+#define SECURITY_MANDATORY_PROTECTED_PROCESS_RID    (0x00005000)
+ 
+#define TOKEN_ALL_ACCESS_P (STANDARD_RIGHTS_REQUIRED |\
+                            TOKEN_ASSIGN_PRIMARY     |\
+                            TOKEN_DUPLICATE          |\
+                            TOKEN_IMPERSONATE        |\
+                            TOKEN_QUERY              |\
+                            TOKEN_QUERY_SOURCE       |\
+                            TOKEN_ADJUST_PRIVILEGES  |\
+                            TOKEN_ADJUST_GROUPS      |\
+                            TOKEN_ADJUST_DEFAULT)
 
 #define DLL_PROCESS_ATTACH   1
 #define DLL_PROCESS_DETACH   0
@@ -257,10 +323,19 @@ typedef int(* FARPROC) ();
 #define HEAP_ENTRY_VIRTUAL_ALLOC    0x08
 #define HEAP_ENTRY_LAST_ENTRY       0x10
 
+#define STANDARD_RIGHTS_READ       0x00020000
+#define FILE_READ_DATA             0x00000001  // file & pipe
+#define FILE_LIST_DIRECTORY        0x00000001  // directory
+#define FILE_READ_ATTRIBUTES       0x00000080
+#define FILE_READ_EA               0x00000008
+
 #define SYNCHRONIZE   (0x00100000L)
 #define FILE_EXECUTE   ( 0x0020 )
 #define FILE_NON_DIRECTORY_FILE   0x00000040
 #define FILE_SYNCHRONOUS_IO_NONALERT   0x00000020
+
+
+#define FILE_GENERIC_READ (STANDARD_RIGHTS_READ | FILE_READ_DATA | FILE_READ_ATTRIBUTES | FILE_READ_EA | SYNCHRONIZE)
 
 #define STATUS_NAME_TOO_LONG   ((NTSTATUS)0xC0000106)
 #define STATUS_BUFFER_OVERFLOW ((NTSTATUS)0x80000005)
@@ -358,6 +433,21 @@ typedef struct _M128A
     ULONGLONG Low;
     LONGLONG High;
 } M128A, *PM128A; 
+
+typedef struct _WNDCLASSEXW {
+    UINT cbSize;
+    UINT style;
+    WNDPROC lpfnWndProc;
+    int cbClsExtra;
+    int cbWndExtra;
+    HINSTANCE hInstance;
+    HICON hIcon;
+    HCURSOR hCursor;
+    HBRUSH hbrBackground;
+    LPCWSTR lpszMenuName;
+    LPCWSTR lpszClassName;
+    HICON hIconSm;
+} WNDCLASSEXW,*LPWNDCLASSEXW,*PWNDCLASSEXW;
 
 typedef struct _XSAVE_FORMAT
 {
@@ -494,6 +584,17 @@ struct _HEAP_ENTRY
     };
 };
 
+typedef enum _KEY_VALUE_INFORMATION_CLASS
+{
+    KeyValueBasicInformation, // KEY_VALUE_BASIC_INFORMATION
+    KeyValueFullInformation, // KEY_VALUE_FULL_INFORMATION
+    KeyValuePartialInformation, // KEY_VALUE_PARTIAL_INFORMATION
+    KeyValueFullInformationAlign64,
+    KeyValuePartialInformationAlign64,  // KEY_VALUE_PARTIAL_INFORMATION_ALIGN64
+    KeyValueLayerInformation, // KEY_VALUE_LAYER_INFORMATION
+    MaxKeyValueInfoClass
+} KEY_VALUE_INFORMATION_CLASS;
+
 struct _HEAP_SEGMENT
 {
     struct _HEAP_ENTRY Entry;
@@ -524,6 +625,20 @@ struct _RTLP_HEAP_COMMIT_LIMIT_DATA
     ULONGLONG CommitLimitBytes;
     ULONGLONG CommitLimitFailureCode;
 };
+
+typedef struct tagPOINT {
+    LONG x;
+    LONG y;
+} POINT;
+
+typedef struct tagMSG {
+    HWND   hwnd;
+    UINT   message;
+    WPARAM wParam;
+    LPARAM lParam;
+    DWORD  time;
+    POINT  pt;
+} MSG, *LPMSG;
 
 struct _HEAP_COUNTERS
 {
@@ -634,6 +749,23 @@ typedef struct _HEAP
     struct _HEAP_TUNING_PARAMETERS TuningParameters;
 } HEAP, *PHEAP;
 
+typedef struct _IO_STATUS_BLOCK
+{
+    union
+    {
+        NTSTATUS Status;
+        PVOID Pointer;
+    };
+    ULONG_PTR Information;
+} IO_STATUS_BLOCK, *PIO_STATUS_BLOCK;
+
+typedef VOID NTAPI IO_APC_ROUTINE(
+    _In_ PVOID ApcContext,
+    _In_ PIO_STATUS_BLOCK IoStatusBlock,
+    _In_ ULONG Reserved
+    );
+typedef IO_APC_ROUTINE* PIO_APC_ROUTINE;
+
 typedef struct _CONTEXT
 {
     ULONGLONG P1Home;
@@ -728,6 +860,21 @@ typedef struct _EXCEPTION_REGISTRATION_RECORD
     struct _EXCEPTION_REGISTRATION_RECORD* Next;
     enum _EXCEPTION_DISPOSITION (*Handler)(struct _EXCEPTION_RECORD* arg1, VOID* arg2, struct _CONTEXT* arg3, VOID* arg4);
 } EXCEPTION_REGISTRATION_RECORD, *PEXCEPTION_REGISTRATION_RECORD; 
+
+typedef enum _KEY_INFORMATION_CLASS
+{
+    KeyBasicInformation, // KEY_BASIC_INFORMATION
+    KeyNodeInformation, // KEY_NODE_INFORMATION
+    KeyFullInformation, // KEY_FULL_INFORMATION
+    KeyNameInformation, // KEY_NAME_INFORMATION
+    KeyCachedInformation, // KEY_CACHED_INFORMATION
+    KeyFlagsInformation, // KEY_FLAGS_INFORMATION
+    KeyVirtualizationInformation, // KEY_VIRTUALIZATION_INFORMATION
+    KeyHandleTagsInformation, // KEY_HANDLE_TAGS_INFORMATION
+    KeyTrustInformation, // KEY_TRUST_INFORMATION
+    KeyLayerInformation, // KEY_LAYER_INFORMATION
+    MaxKeyInfoClass
+} KEY_INFORMATION_CLASS;
 
 typedef struct _NT_TIB {
     struct _EXCEPTION_REGISTRATION_RECORD *ExceptionList;
@@ -885,6 +1032,18 @@ typedef enum _ALTERNATIVE_ARCHITECTURE_TYPE {
     EndAlternatives
 } ALTERNATIVE_ARCHITECTURE_TYPE, *PALTERNATIVE_ARCHITECTURE_TYPE;
 
+typedef enum _OBJECT_INFORMATION_CLASS
+{
+    ObjectBasicInformation, // q: OBJECT_BASIC_INFORMATION
+    ObjectNameInformation, // q: OBJECT_NAME_INFORMATION
+    ObjectTypeInformation, // q: OBJECT_TYPE_INFORMATION
+    ObjectTypesInformation, // q: OBJECT_TYPES_INFORMATION
+    ObjectHandleFlagInformation, // qs: OBJECT_HANDLE_FLAG_INFORMATION
+    ObjectSessionInformation, // s: void // change object session // (requires SeTcbPrivilege)
+    ObjectSessionObjectInformation, // s: void // change object session // (requires SeTcbPrivilege)
+    MaxObjectInfoClass
+} OBJECT_INFORMATION_CLASS;
+
 typedef struct _XSTATE_FEATURE {
     ULONG Offset;
     ULONG Size;
@@ -909,6 +1068,66 @@ typedef struct _XSTATE_CONFIGURATION {
     ULONG64 AllFeatures;
     ULONG64 EnabledUserVisibleSupervisorFeatures;
 } XSTATE_CONFIGURATION, *PXSTATE_CONFIGURATION;
+
+typedef enum _EVENT_TYPE
+{
+    NotificationEvent,
+    SynchronizationEvent
+} EVENT_TYPE;
+
+typedef enum _TOKEN_INFORMATION_CLASS
+{
+    TokenUser = 1, // q: TOKEN_USER, SE_TOKEN_USER
+    TokenGroups, // q: TOKEN_GROUPS
+    TokenPrivileges, // q: TOKEN_PRIVILEGES
+    TokenOwner, // q; s: TOKEN_OWNER
+    TokenPrimaryGroup, // q; s: TOKEN_PRIMARY_GROUP
+    TokenDefaultDacl, // q; s: TOKEN_DEFAULT_DACL
+    TokenSource, // q: TOKEN_SOURCE
+    TokenType, // q: TOKEN_TYPE
+    TokenImpersonationLevel, // q: SECURITY_IMPERSONATION_LEVEL
+    TokenStatistics, // q: TOKEN_STATISTICS // 10
+    TokenRestrictedSids, // q: TOKEN_GROUPS
+    TokenSessionId, // q; s: ULONG (requires SeTcbPrivilege)
+    TokenGroupsAndPrivileges, // q: TOKEN_GROUPS_AND_PRIVILEGES
+    TokenSessionReference, // s: ULONG (requires SeTcbPrivilege)
+    TokenSandBoxInert, // q: ULONG
+    TokenAuditPolicy, // q; s: TOKEN_AUDIT_POLICY (requires SeSecurityPrivilege/SeTcbPrivilege)
+    TokenOrigin, // q; s: TOKEN_ORIGIN (requires SeTcbPrivilege)
+    TokenElevationType, // q: TOKEN_ELEVATION_TYPE
+    TokenLinkedToken, // q; s: TOKEN_LINKED_TOKEN (requires SeCreateTokenPrivilege)
+    TokenElevation, // q: TOKEN_ELEVATION // 20
+    TokenHasRestrictions, // q: ULONG
+    TokenAccessInformation, // q: TOKEN_ACCESS_INFORMATION
+    TokenVirtualizationAllowed, // q; s: ULONG (requires SeCreateTokenPrivilege)
+    TokenVirtualizationEnabled, // q; s: ULONG
+    TokenIntegrityLevel, // q; s: TOKEN_MANDATORY_LABEL
+    TokenUIAccess, // q; s: ULONG (requires SeTcbPrivilege)
+    TokenMandatoryPolicy, // q; s: TOKEN_MANDATORY_POLICY (requires SeTcbPrivilege)
+    TokenLogonSid, // q: TOKEN_GROUPS
+    TokenIsAppContainer, // q: ULONG // since WIN8
+    TokenCapabilities, // q: TOKEN_GROUPS // 30
+    TokenAppContainerSid, // q: TOKEN_APPCONTAINER_INFORMATION
+    TokenAppContainerNumber, // q: ULONG
+    TokenUserClaimAttributes, // q: CLAIM_SECURITY_ATTRIBUTES_INFORMATION
+    TokenDeviceClaimAttributes, // q: CLAIM_SECURITY_ATTRIBUTES_INFORMATION
+    TokenRestrictedUserClaimAttributes, // q: CLAIM_SECURITY_ATTRIBUTES_INFORMATION
+    TokenRestrictedDeviceClaimAttributes, // q: CLAIM_SECURITY_ATTRIBUTES_INFORMATION
+    TokenDeviceGroups, // q: TOKEN_GROUPS
+    TokenRestrictedDeviceGroups, // q: TOKEN_GROUPS
+    TokenSecurityAttributes, // q; s: TOKEN_SECURITY_ATTRIBUTES_[AND_OPERATION_]INFORMATION (requires SeTcbPrivilege)
+    TokenIsRestricted, // q: ULONG // 40
+    TokenProcessTrustLevel, // q: TOKEN_PROCESS_TRUST_LEVEL // since WINBLUE
+    TokenPrivateNameSpace, // q; s: ULONG (requires SeTcbPrivilege) // since THRESHOLD
+    TokenSingletonAttributes, // q: TOKEN_SECURITY_ATTRIBUTES_INFORMATION // since REDSTONE
+    TokenBnoIsolation, // q: TOKEN_BNO_ISOLATION_INFORMATION // since REDSTONE2
+    TokenChildProcessFlags, // s: ULONG  (requires SeTcbPrivilege) // since REDSTONE3
+    TokenIsLessPrivilegedAppContainer, // q: ULONG // since REDSTONE5
+    TokenIsSandboxed, // q: ULONG // since 19H1
+    TokenIsAppSilo, // q: ULONG // since WIN11 22H2 // previously TokenOriginatingProcessTrustLevel // q: TOKEN_PROCESS_TRUST_LEVEL
+    TokenLoggingInformation, // TOKEN_LOGGING_INFORMATION // since 24H2
+    MaxTokenInfoClass
+} TOKEN_INFORMATION_CLASS, *PTOKEN_INFORMATION_CLASS;
 
 typedef struct _PEB_LDR_DATA
 {
@@ -977,6 +1196,41 @@ typedef struct _LDR_DDAG_NODE
     ULONG PreorderNumber;
 } LDR_DDAG_NODE, *PLDR_DDAG_NODE;
 
+typedef struct _LUID {
+    ULONG LowPart;
+    LONG  HighPart;
+} LUID, *PLUID;
+
+typedef struct _SID_IDENTIFIER_AUTHORITY {
+    BYTE Value[6];
+} SID_IDENTIFIER_AUTHORITY;
+
+typedef struct _SID {
+    BYTE Revision;
+    BYTE SubAuthorityCount;
+    SID_IDENTIFIER_AUTHORITY IdentifierAuthority;
+    DWORD SubAuthority[];
+} SID, *PSID;
+
+typedef struct _SID_AND_ATTRIBUTES {
+    PSID  Sid;
+    DWORD Attributes;
+} SID_AND_ATTRIBUTES, *PSID_AND_ATTRIBUTES;
+
+typedef struct _TOKEN_MANDATORY_LABEL {
+    SID_AND_ATTRIBUTES Label;
+} TOKEN_MANDATORY_LABEL, *PTOKEN_MANDATORY_LABEL;
+
+typedef struct _LUID_AND_ATTRIBUTES {
+    LUID  Luid;
+    DWORD Attributes;
+} LUID_AND_ATTRIBUTES, *PLUID_AND_ATTRIBUTES;
+
+typedef struct _TOKEN_PRIVILEGES {
+    DWORD               PrivilegeCount;
+    LUID_AND_ATTRIBUTES Privileges[ANYSIZE_ARRAY];
+} TOKEN_PRIVILEGES, *PTOKEN_PRIVILEGES;
+
 typedef struct _LDRP_LOAD_CONTEXT *PLDRP_LOAD_CONTEXT;
 
 typedef struct _RTL_BALANCED_NODE
@@ -1012,6 +1266,94 @@ typedef enum _LDR_DLL_LOAD_REASON
     LoadReasonPatchImage,
     LoadReasonUnknown = -1
 } LDR_DLL_LOAD_REASON, *PLDR_DLL_LOAD_REASON;
+
+typedef enum _FILE_INFORMATION_CLASS
+{
+    FileDirectoryInformation = 1, // q: FILE_DIRECTORY_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex])
+    FileFullDirectoryInformation, // q: FILE_FULL_DIR_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex])
+    FileBothDirectoryInformation, // q: FILE_BOTH_DIR_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex])
+    FileBasicInformation, // qs: FILE_BASIC_INFORMATION (q: requires FILE_READ_ATTRIBUTES; s: requires FILE_WRITE_ATTRIBUTES)
+    FileStandardInformation, // q: FILE_STANDARD_INFORMATION, FILE_STANDARD_INFORMATION_EX
+    FileInternalInformation, // q: FILE_INTERNAL_INFORMATION
+    FileEaInformation, // q: FILE_EA_INFORMATION
+    FileAccessInformation, // q: FILE_ACCESS_INFORMATION
+    FileNameInformation, // q: FILE_NAME_INFORMATION
+    FileRenameInformation, // s: FILE_RENAME_INFORMATION (requires DELETE) // 10
+    FileLinkInformation, // s: FILE_LINK_INFORMATION
+    FileNamesInformation, // q: FILE_NAMES_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex])
+    FileDispositionInformation, // s: FILE_DISPOSITION_INFORMATION (requires DELETE)
+    FilePositionInformation, // qs: FILE_POSITION_INFORMATION
+    FileFullEaInformation, // FILE_FULL_EA_INFORMATION
+    FileModeInformation, // qs: FILE_MODE_INFORMATION
+    FileAlignmentInformation, // q: FILE_ALIGNMENT_INFORMATION
+    FileAllInformation, // q: FILE_ALL_INFORMATION (requires FILE_READ_ATTRIBUTES)
+    FileAllocationInformation, // s: FILE_ALLOCATION_INFORMATION (requires FILE_WRITE_DATA)
+    FileEndOfFileInformation, // s: FILE_END_OF_FILE_INFORMATION (requires FILE_WRITE_DATA) // 20
+    FileAlternateNameInformation, // q: FILE_NAME_INFORMATION
+    FileStreamInformation, // q: FILE_STREAM_INFORMATION
+    FilePipeInformation, // qs: FILE_PIPE_INFORMATION (q: requires FILE_READ_ATTRIBUTES; s: requires FILE_WRITE_ATTRIBUTES)
+    FilePipeLocalInformation, // q: FILE_PIPE_LOCAL_INFORMATION (requires FILE_READ_ATTRIBUTES)
+    FilePipeRemoteInformation, // qs: FILE_PIPE_REMOTE_INFORMATION (q: requires FILE_READ_ATTRIBUTES; s: requires FILE_WRITE_ATTRIBUTES)
+    FileMailslotQueryInformation, // q: FILE_MAILSLOT_QUERY_INFORMATION
+    FileMailslotSetInformation, // s: FILE_MAILSLOT_SET_INFORMATION
+    FileCompressionInformation, // q: FILE_COMPRESSION_INFORMATION
+    FileObjectIdInformation, // q: FILE_OBJECTID_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex])
+    FileCompletionInformation, // s: FILE_COMPLETION_INFORMATION // 30
+    FileMoveClusterInformation, // s: FILE_MOVE_CLUSTER_INFORMATION (requires FILE_WRITE_DATA)
+    FileQuotaInformation, // q: FILE_QUOTA_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex])
+    FileReparsePointInformation, // q: FILE_REPARSE_POINT_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex])
+    FileNetworkOpenInformation, // q: FILE_NETWORK_OPEN_INFORMATION (requires FILE_READ_ATTRIBUTES)
+    FileAttributeTagInformation, // q: FILE_ATTRIBUTE_TAG_INFORMATION (requires FILE_READ_ATTRIBUTES)
+    FileTrackingInformation, // s: FILE_TRACKING_INFORMATION (requires FILE_WRITE_DATA)
+    FileIdBothDirectoryInformation, // q: FILE_ID_BOTH_DIR_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex])
+    FileIdFullDirectoryInformation, // q: FILE_ID_FULL_DIR_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex])
+    FileValidDataLengthInformation, // s: FILE_VALID_DATA_LENGTH_INFORMATION (requires FILE_WRITE_DATA and/or SeManageVolumePrivilege)
+    FileShortNameInformation, // s: FILE_NAME_INFORMATION (requires DELETE) // 40
+    FileIoCompletionNotificationInformation, // qs: FILE_IO_COMPLETION_NOTIFICATION_INFORMATION (q: requires FILE_READ_ATTRIBUTES) // since VISTA
+    FileIoStatusBlockRangeInformation, // s: FILE_IOSTATUSBLOCK_RANGE_INFORMATION (requires SeLockMemoryPrivilege)
+    FileIoPriorityHintInformation, // qs: FILE_IO_PRIORITY_HINT_INFORMATION, FILE_IO_PRIORITY_HINT_INFORMATION_EX (q: requires FILE_READ_DATA)
+    FileSfioReserveInformation, // qs: FILE_SFIO_RESERVE_INFORMATION (q: requires FILE_READ_DATA)
+    FileSfioVolumeInformation, // q: FILE_SFIO_VOLUME_INFORMATION (requires FILE_READ_ATTRIBUTES)
+    FileHardLinkInformation, // q: FILE_LINKS_INFORMATION
+    FileProcessIdsUsingFileInformation, // q: FILE_PROCESS_IDS_USING_FILE_INFORMATION (requires FILE_READ_ATTRIBUTES)
+    FileNormalizedNameInformation, // q: FILE_NAME_INFORMATION
+    FileNetworkPhysicalNameInformation, // q: FILE_NETWORK_PHYSICAL_NAME_INFORMATION
+    FileIdGlobalTxDirectoryInformation, // q: FILE_ID_GLOBAL_TX_DIR_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex]) // since WIN7 // 50
+    FileIsRemoteDeviceInformation, // q: FILE_IS_REMOTE_DEVICE_INFORMATION (requires FILE_READ_ATTRIBUTES)
+    FileUnusedInformation,
+    FileNumaNodeInformation, // q: FILE_NUMA_NODE_INFORMATION
+    FileStandardLinkInformation, // q: FILE_STANDARD_LINK_INFORMATION
+    FileRemoteProtocolInformation, // q: FILE_REMOTE_PROTOCOL_INFORMATION
+    FileRenameInformationBypassAccessCheck, // s: FILE_RENAME_INFORMATION // (kernel-mode only) // since WIN8
+    FileLinkInformationBypassAccessCheck, // s: FILE_LINK_INFORMATION // (kernel-mode only)
+    FileVolumeNameInformation, // q: FILE_VOLUME_NAME_INFORMATION
+    FileIdInformation, // q: FILE_ID_INFORMATION
+    FileIdExtdDirectoryInformation, // q: FILE_ID_EXTD_DIR_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex]) // 60
+    FileReplaceCompletionInformation, // s: FILE_COMPLETION_INFORMATION // since WINBLUE
+    FileHardLinkFullIdInformation, // q: FILE_LINK_ENTRY_FULL_ID_INFORMATION // FILE_LINKS_FULL_ID_INFORMATION
+    FileIdExtdBothDirectoryInformation, // q: FILE_ID_EXTD_BOTH_DIR_INFORMATION (requires FILE_LIST_DIRECTORY) (NtQueryDirectoryFile[Ex]) // since THRESHOLD
+    FileDispositionInformationEx, // s: FILE_DISPOSITION_INFO_EX (requires DELETE) // since REDSTONE
+    FileRenameInformationEx, // s: FILE_RENAME_INFORMATION_EX
+    FileRenameInformationExBypassAccessCheck, // s: FILE_RENAME_INFORMATION_EX // (kernel-mode only)
+    FileDesiredStorageClassInformation, // qs: FILE_DESIRED_STORAGE_CLASS_INFORMATION (q: requires FILE_READ_ATTRIBUTES; s: requires FILE_WRITE_ATTRIBUTES) // since REDSTONE2
+    FileStatInformation, // q: FILE_STAT_INFORMATION (requires FILE_READ_ATTRIBUTES)
+    FileMemoryPartitionInformation, // s: FILE_MEMORY_PARTITION_INFORMATION // since REDSTONE3
+    FileStatLxInformation, // q: FILE_STAT_LX_INFORMATION (requires FILE_READ_ATTRIBUTES and FILE_READ_EA) // since REDSTONE4 // 70
+    FileCaseSensitiveInformation, // qs: FILE_CASE_SENSITIVE_INFORMATION (q: requires FILE_READ_ATTRIBUTES; s: requires FILE_WRITE_ATTRIBUTES)
+    FileLinkInformationEx, // s: FILE_LINK_INFORMATION_EX // since REDSTONE5
+    FileLinkInformationExBypassAccessCheck, // s: FILE_LINK_INFORMATION_EX // (kernel-mode only)
+    FileStorageReserveIdInformation, // qs: FILE_STORAGE_RESERVE_ID_INFORMATION (q: requires FILE_READ_ATTRIBUTES; s: requires FILE_WRITE_ATTRIBUTES)
+    FileCaseSensitiveInformationForceAccessCheck, // qs: FILE_CASE_SENSITIVE_INFORMATION
+    FileKnownFolderInformation, // qs: FILE_KNOWN_FOLDER_INFORMATION (q: requires FILE_READ_ATTRIBUTES; s: requires FILE_WRITE_ATTRIBUTES) // since WIN11
+    FileStatBasicInformation, // qs: FILE_STAT_BASIC_INFORMATION // since 23H2
+    FileId64ExtdDirectoryInformation, // FILE_ID_64_EXTD_DIR_INFORMATION
+    FileId64ExtdBothDirectoryInformation, // FILE_ID_64_EXTD_BOTH_DIR_INFORMATION
+    FileIdAllExtdDirectoryInformation, // FILE_ID_ALL_EXTD_DIR_INFORMATION
+    FileIdAllExtdBothDirectoryInformation, // FILE_ID_ALL_EXTD_BOTH_DIR_INFORMATION
+    FileStreamReservationInformation, // FILE_STREAM_RESERVATION_INFORMATION // since 24H2
+    FileMupProviderInfo, // MUP_PROVIDER_INFORMATION
+    FileMaximumInformation
+} FILE_INFORMATION_CLASS, *PFILE_INFORMATION_CLASS;
 
 typedef enum _LDR_HOT_PATCH_STATE
 {
@@ -1108,6 +1450,14 @@ typedef struct _STRING
     USHORT MaximumLength;
     PCHAR Buffer;
 } STRING, *PSTRING, ANSI_STRING, *PANSI_STRING, OEM_STRING, *POEM_STRING;
+
+typedef struct _LARGE_STRING
+{
+    ULONG Length;
+    ULONG MaximumLength:31;
+    ULONG bAnsi:1;
+    PVOID Buffer;
+} LARGE_STRING, *PLARGE_STRING;
 
 typedef struct _RTL_DRIVE_LETTER_CURDIR
 {
@@ -1919,14 +2269,6 @@ typedef struct _KERNEL_CALLBACK_TABLE
     PVOID __xxxClientTrackInit;
 } KERNEL_CALLBACK_TABLE, *PKERNEL_CALLBACK_TABLE;
 
-typedef struct _IO_STATUS_BLOCK {
-    union {
-        NTSTATUS Status;
-        PVOID    Pointer;
-    };
-    ULONG_PTR Information;
-} IO_STATUS_BLOCK, *PIO_STATUS_BLOCK;
-
 typedef struct _API_SET_NAMESPACE
 {
     ULONG Version;
@@ -1956,6 +2298,22 @@ typedef struct _SILO_USER_SHARED_DATA
     LARGE_INTEGER TimeZoneBiasEffectiveStart;
     LARGE_INTEGER TimeZoneBiasEffectiveEnd;
 } SILO_USER_SHARED_DATA, *PSILO_USER_SHARED_DATA;
+
+typedef struct _RECT {
+    LONG left;
+    LONG top;
+    LONG right;
+    LONG bottom;
+} RECT;
+
+typedef struct _PAINTSTRUCT {
+    HDC  hdc;
+    BOOL fErase;
+    RECT rcPaint;
+    BOOL fRestore;
+    BOOL fIncUpdate;
+    BYTE rgbReserved[32];
+} PAINTSTRUCT;
 
 typedef struct _RTL_BITMAP
 {
@@ -2086,6 +2444,13 @@ typedef struct _WER_HEAP_MAIN_HEADER
     ULONG FreeCount;
 } WER_HEAP_MAIN_HEADER, *PWER_HEAP_MAIN_HEADER;
 
+typedef struct _CLSMENUNAME
+{
+    LPSTR pszClientAnsiMenuName;
+    LPWSTR pwszClientUnicodeMenuName;
+    PUNICODE_STRING pusMenuName;
+} CLSMENUNAME, *PCLSMENUNAME;
+
 typedef struct _WER_PEB_HEADER_BLOCK
 {
     LONG Length;
@@ -2147,6 +2512,14 @@ typedef struct _IMAGE_DOS_HEADER {
     WORD   e_res2[10];
     LONG   e_lfanew;
 } IMAGE_DOS_HEADER, *PIMAGE_DOS_HEADER;
+
+typedef struct _FILE_STANDARD_INFORMATION {
+    LARGE_INTEGER AllocationSize;
+    LARGE_INTEGER EndOfFile;
+    ULONG NumberOfLinks;
+    BOOLEAN DeletePending;
+    BOOLEAN Directory;
+} FILE_STANDARD_INFORMATION;
 
 typedef struct _IMAGE_FILE_HEADER {
     WORD  Machine;
@@ -2807,10 +3180,395 @@ typedef struct _PEB {
     ULONGLONG ExtendedFeatureDisableMask;
 } PEB, *PPEB;
 
-int CallSyscallEx(ULONGLONG hash, ULONGLONG *args, int count);
+NTSTATUS NtAllocateVirtualMemory(
+    HANDLE ProcessHandle,
+    PVOID *BaseAddress,
+    ULONG_PTR ZeroBits,
+    PSIZE_T RegionSize,
+    ULONG AllocationType,
+    ULONG Protect
+);
 
-#define CallSyscall(syscall_hash, args) \
-    CallSyscallEx((syscall_hash), (args), sizeof(args) / sizeof((args)[0]))
+NTSTATUS NtFreeVirtualMemory(
+    HANDLE ProcessHandle,
+    PVOID *BaseAddress,
+    PSIZE_T RegionSize,
+    ULONG FreeType
+);
+
+NTSTATUS NtProtectVirtualMemory(
+    HANDLE ProcessHandle,
+    PVOID *BaseAddress,
+    PSIZE_T RegionSize,
+    ULONG NewProtect,
+    PULONG OldProtect
+);
+
+NTSTATUS NtReadVirtualMemory(
+    HANDLE ProcessHandle,
+    PVOID BaseAddress,
+    PVOID Buffer,
+    SIZE_T NumberOfBytesToRead,
+    PSIZE_T NumberOfBytesRead
+);
+
+NTSTATUS NtWriteVirtualMemory(
+    HANDLE ProcessHandle,
+    PVOID BaseAddress,
+    PVOID Buffer,
+    SIZE_T NumberOfBytesToWrite,
+    PSIZE_T NumberOfBytesWritten
+);
+
+NTSTATUS NtCreateFile(
+    PHANDLE FileHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes,
+    PIO_STATUS_BLOCK IoStatusBlock,
+    PLARGE_INTEGER AllocationSize,
+    ULONG FileAttributes,
+    ULONG ShareAccess,
+    ULONG CreateDisposition,
+    ULONG CreateOptions,
+    PVOID EaBuffer,
+    ULONG EaLength
+);
+
+NTSTATUS NtOpenFile(
+    PHANDLE FileHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes,
+    PIO_STATUS_BLOCK IoStatusBlock,
+    ULONG ShareAccess,
+    ULONG OpenOptions
+);
+
+NTSTATUS NtReadFile(
+    HANDLE FileHandle,
+    HANDLE Event,
+    PIO_APC_ROUTINE ApcRoutine,
+    PVOID ApcContext,
+    PIO_STATUS_BLOCK IoStatusBlock,
+    PVOID Buffer,
+    ULONG Length,
+    PLARGE_INTEGER ByteOffset,
+    PULONG Key
+);
+
+NTSTATUS NtWriteFile(
+    HANDLE FileHandle,
+    HANDLE Event,
+    PIO_APC_ROUTINE ApcRoutine,
+    PVOID ApcContext,
+    PIO_STATUS_BLOCK IoStatusBlock,
+    PVOID Buffer,
+    ULONG Length,
+    PLARGE_INTEGER ByteOffset,
+    PULONG Key
+);
+
+NTSTATUS NtClose(
+    HANDLE Handle
+);
+
+NTSTATUS NtQueryInformationFile(
+    HANDLE FileHandle,
+    PIO_STATUS_BLOCK IoStatusBlock,
+    PVOID FileInformation,
+    ULONG Length,
+    FILE_INFORMATION_CLASS FileInformationClass
+);
+
+NTSTATUS NtCreateProcessEx(
+    PHANDLE ProcessHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes,
+    HANDLE ParentProcess,
+    ULONG Flags,
+    HANDLE SectionHandle,
+    HANDLE DebugPort,
+    HANDLE ExceptionPort,
+    BOOLEAN InJob
+);
+
+NTSTATUS NtCreateThreadEx(
+    PHANDLE ThreadHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes,
+    HANDLE ProcessHandle,
+    PVOID StartRoutine,
+    PVOID Argument,
+    ULONG CreateFlags,
+    SIZE_T ZeroBits,
+    SIZE_T StackSize,
+    SIZE_T MaximumStackSize,
+    PVOID AttributeList
+);
+
+NTSTATUS NtQueryInformationProcess(
+    HANDLE ProcessHandle,
+    PROCESSINFOCLASS ProcessInformationClass,
+    PVOID ProcessInformation,
+    ULONG ProcessInformationLength,
+    PULONG ReturnLength
+);
+
+NTSTATUS NtOpenProcess(
+    PHANDLE ProcessHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes,
+    PCLIENT_ID ClientId
+);
+
+NTSTATUS NtOpenThread(
+    PHANDLE ThreadHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes,
+    PCLIENT_ID ClientId
+);
+
+NTSTATUS NtTerminateProcess(
+    HANDLE ProcessHandle,
+    NTSTATUS ExitStatus
+);
+
+NTSTATUS NtDelayExecution(
+    BOOLEAN Alertable,
+    PLARGE_INTEGER DelayInterval
+);
+
+NTSTATUS NtQueryPerformanceCounter(
+    PLARGE_INTEGER PerformanceCounter,
+    PLARGE_INTEGER PerformanceFrequency
+);
+
+NTSTATUS NtYieldExecution(void);
+
+NTSTATUS NtQuerySystemInformation(
+    SYSTEM_INFORMATION_CLASS SystemInformationClass,
+    PVOID SystemInformation,
+    ULONG SystemInformationLength,
+    PULONG ReturnLength
+);
+
+NTSTATUS NtGetContextThread(
+    HANDLE ThreadHandle,
+    PCONTEXT ThreadContext
+);
+
+NTSTATUS NtSetContextThread(
+    HANDLE ThreadHandle,
+    PCONTEXT ThreadContext
+);
+
+NTSTATUS NtResumeThread(
+    HANDLE ThreadHandle,
+    PULONG SuspendCount
+);
+
+NTSTATUS NtSuspendThread(
+    HANDLE ThreadHandle,
+    PULONG PreviousSuspendCount
+);
+
+NTSTATUS NtMapViewOfSection(
+    HANDLE SectionHandle,
+    HANDLE ProcessHandle,
+    PVOID *BaseAddress,
+    ULONG_PTR ZeroBits,
+    SIZE_T CommitSize,
+    PLARGE_INTEGER SectionOffset,
+    PSIZE_T ViewSize,
+    SECTION_INHERIT InheritDisposition,
+    ULONG AllocationType,
+    ULONG PageProtection
+);
+
+NTSTATUS NtUnmapViewOfSection(
+    HANDLE ProcessHandle,
+    PVOID BaseAddress
+);
+
+NTSTATUS NtCreateSection(
+    PHANDLE SectionHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes,
+    PLARGE_INTEGER MaximumSize,
+    ULONG SectionPageProtection,
+    ULONG AllocationAttributes,
+    HANDLE FileHandle
+);
+
+NTSTATUS NtQueryObject(
+    HANDLE Handle,
+    OBJECT_INFORMATION_CLASS ObjectInformationClass,
+    PVOID ObjectInformation,
+    ULONG ObjectInformationLength,
+    PULONG ReturnLength
+);
+
+NTSTATUS NtDuplicateObject(
+    HANDLE SourceProcessHandle,
+    HANDLE SourceHandle,
+    HANDLE TargetProcessHandle,
+    PHANDLE TargetHandle,
+    ACCESS_MASK DesiredAccess,
+    ULONG HandleAttributes,
+    ULONG Options
+);
+
+NTSTATUS NtOpenProcessTokenEx(
+    HANDLE ProcessHandle,
+    ACCESS_MASK DesiredAccess,
+    ULONG HandleAttributes,
+    PHANDLE TokenHandle
+);
+
+NTSTATUS NtOpenThreadTokenEx(
+    HANDLE ThreadHandle,
+    ACCESS_MASK DesiredAccess,
+    BOOLEAN OpenAsSelf,
+    ULONG HandleAttributes,
+    PHANDLE TokenHandle
+);
+
+NTSTATUS NtAdjustPrivilegesToken(
+    HANDLE TokenHandle,
+    BOOLEAN DisableAllPrivileges,
+    PTOKEN_PRIVILEGES NewState,
+    ULONG BufferLength,
+    PTOKEN_PRIVILEGES PreviousState,
+    PULONG ReturnLength
+);
+
+NTSTATUS NtSetInformationToken(
+    HANDLE TokenHandle,
+    TOKEN_INFORMATION_CLASS TokenInformationClass,
+    PVOID TokenInformation,
+    ULONG TokenInformationLength
+);
+
+NTSTATUS NtCreateKey(
+    PHANDLE KeyHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes,
+    ULONG TitleIndex,
+    PUNICODE_STRING Class,
+    ULONG CreateOptions,
+    PULONG Disposition
+);
+
+NTSTATUS NtOpenKey(
+    PHANDLE KeyHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes
+);
+
+NTSTATUS NtDeleteKey(
+    HANDLE KeyHandle
+);
+
+NTSTATUS NtSetValueKey(
+    HANDLE KeyHandle,
+    PUNICODE_STRING ValueName,
+    ULONG TitleIndex,
+    ULONG Type,
+    PVOID Data,
+    ULONG DataSize
+);
+
+NTSTATUS NtQueryValueKey(
+    HANDLE KeyHandle,
+    PUNICODE_STRING ValueName,
+    KEY_VALUE_INFORMATION_CLASS KeyValueInformationClass,
+    PVOID KeyValueInformation,
+    ULONG Length,
+    PULONG ResultLength
+);
+
+NTSTATUS NtEnumerateKey(
+    HANDLE KeyHandle,
+    ULONG Index,
+    KEY_INFORMATION_CLASS KeyInformationClass,
+    PVOID KeyInformation,
+    ULONG Length,
+    PULONG ResultLength
+);
+
+NTSTATUS NtEnumerateValueKey(
+    HANDLE KeyHandle,
+    ULONG Index,
+    KEY_VALUE_INFORMATION_CLASS KeyValueInformationClass,
+    PVOID KeyValueInformation,
+    ULONG Length,
+    PULONG ResultLength
+);
+
+NTSTATUS NtCreateDirectoryObject(
+    PHANDLE DirectoryHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes
+);
+
+NTSTATUS NtOpenDirectoryObject(
+    PHANDLE DirectoryHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes
+);
+
+NTSTATUS NtQueryDirectoryObject(
+    _In_ HANDLE DirectoryHandle,
+    _Out_ PVOID Buffer,
+    _In_ ULONG Length,
+    _In_ BOOLEAN ReturnSingleEntry,
+    _In_ BOOLEAN RestartScan,
+    _Inout_ PULONG Context,
+    _Out_opt_ PULONG ReturnLength
+);
+
+NTSTATUS NtCreateSymbolicLinkObject(
+    _Out_ PHANDLE LinkHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ PUNICODE_STRING LinkTarget
+);
+
+NTSTATUS NtOpenSymbolicLinkObject(
+    _Out_ PHANDLE LinkHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes
+);
+
+NTSTATUS NtCreateEvent(
+    _Out_ PHANDLE EventHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ EVENT_TYPE EventType,
+    _In_ BOOLEAN InitialState
+);
+
+NTSTATUS NtSetEvent(
+    _In_ HANDLE EventHandle,
+    _Out_opt_ PLONG PreviousState
+);
+
+NTSTATUS NtClearEvent(
+    _In_ HANDLE EventHandle
+);
+
+NTSTATUS NtWaitForSingleObject(
+    _In_ HANDLE Handle,
+    _In_ BOOLEAN Alertable,
+    _In_opt_ PLARGE_INTEGER Timeout
+);
+
+NTSTATUS NtQueryInformationToken(
+    _In_ HANDLE TokenHandle,
+    _In_ TOKEN_INFORMATION_CLASS TokenInformationClass,
+    _Out_ PVOID TokenInformation,
+    _In_ ULONG TokenInformationLength,
+    _Out_ PULONG ReturnLength
+);
 
 #ifdef __cplusplus
 }

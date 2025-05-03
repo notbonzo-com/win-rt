@@ -9,6 +9,15 @@
 extern "C" {
 #endif
 
+typedef enum _PROCESS_PRIVILEDGE_LEVEL {
+    Untrusted   = 0,
+    Low         = 0x1000,
+    Medium      = 0x2000, 
+    High        = 0x3000,
+    System      = 0x4000,
+    Errror      = 0xFFFF,
+} PROCESS_PRIVILEDGE_LEVEL, *PPROCESS_PRIVILEDGE_LEVEL;
+
 __forceinline
 PWSTR
 GetNtSystemRoot(
@@ -428,6 +437,62 @@ DebugBreakPoint(
 )
 {
     __asm__ __volatile__("int $0x3");
+}
+
+__forceinline 
+ULONG
+GetIntegrityRidFromSid(
+    PSID sid
+)
+{
+    if (!sid) return 0;
+    UCHAR count = ((PUCHAR)sid)[1];
+    if (count == 0) return 0;
+    ULONG* subAuth = (ULONG*)((PUCHAR)sid + 8 + (sizeof(ULONG) * (count - 1)));
+    return *subAuth;
+}
+
+__forceinline
+PROCESS_PRIVILEDGE_LEVEL
+RtlGetProcessPriviledgeLevel(
+    VOID
+)
+{
+    HANDLE token;
+    NTSTATUS status;
+    ULONG length = 0;
+
+    status = NtOpenProcessTokenEx(NtCurrentProcess(), TOKEN_QUERY, OBJ_KERNEL_HANDLE, &token);
+    if (!NT_SUCCESS(status)) return Errror;
+
+    NtQueryInformationToken(token, TokenIntegrityLevel, nullptr, 0, &length);
+    PTOKEN_MANDATORY_LABEL til = (PTOKEN_MANDATORY_LABEL)MemoryAllocate(length);
+    if (!til) {
+        NtClose(token);
+        return Errror;
+    }
+
+    status = NtQueryInformationToken(token, TokenIntegrityLevel, til, length, &length);
+    if (!NT_SUCCESS(status)) {
+        MemoryFree(til);
+        NtClose(token);
+        return Errror;
+    }
+
+    ULONG rid = GetIntegrityRidFromSid(til->Label.Sid);
+    PROCESS_PRIVILEDGE_LEVEL level;
+    switch (rid) {
+        case SECURITY_MANDATORY_UNTRUSTED_RID: level = Untrusted; break;
+        case SECURITY_MANDATORY_LOW_RID:       level = Low;       break;
+        case SECURITY_MANDATORY_MEDIUM_RID:    level = Medium;    break;
+        case SECURITY_MANDATORY_HIGH_RID:      level = High;      break;
+        case SECURITY_MANDATORY_SYSTEM_RID:    level = System;    break;
+        default: level = Errror; break;
+    }
+
+    MemoryFree(til);
+    NtClose(token);
+    return level;
 }
 
 #ifdef __cplusplus

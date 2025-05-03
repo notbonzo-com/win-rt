@@ -32,31 +32,9 @@ static size_t align_size(size_t size) {
 static HeapSegment* allocate_segment(size_t seg_size) {
     SIZE_T regionSize = seg_size;
     void *base = NULL;
-    ULONGLONG args[6];
-    args[0] = (ULONGLONG)NtCurrentProcess();
-    args[1] = (ULONGLONG)&base;
-    args[2] = 0;
-    args[3] = (ULONGLONG)&regionSize;
-    args[4] = MEM_RESERVE | MEM_COMMIT;
-    args[5] = PAGE_READWRITE;
-    
-#if 0
-    NTSTATUS (*NtAllocateVirtualMemory)(
-        HANDLE ProcessHandle,      // value
-        PVOID *BaseAddress,        // ← double pointer!
-        ULONG ZeroBits,            // value
-        PSIZE_T RegionSize,        // ← pointer!
-        ULONG AllocationType,      // value
-        ULONG Protect              // value
-    ) = FindExportByHash(FindInMemoryModuleByHash(NTDLL_HASH), NtAllocateVirtualMemory_HASH);
     
     NTSTATUS status = NtAllocateVirtualMemory(NtCurrentProcess(), &base, 0, &regionSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-#endif
-    NTSTATUS status = CallSyscall(NtAllocateVirtualMemory_HASH, args);
     if (!NT_SUCCESS(status)) {
-        /* dies here */
-        dbgio_printf("NtAllocateVirtualMemory failed: 0x%llx\n", status);
-        __debugbreak();
         return NULL;
     }
     
@@ -166,16 +144,9 @@ void MemoryFree(void *ptr) {
                     heap_segments = seg->next;
                 
                 SIZE_T regionSize = seg->size;
-                ULONGLONG args[4];
                 void *base = seg;
-                args[0] = (ULONGLONG)NtCurrentProcess();
-                args[1] = (ULONGLONG)&base;
-                args[2] = (ULONGLONG)&regionSize;
-                args[3] = MEM_RELEASE;
-                NTSTATUS status = CallSyscall(NtFreeVirtualMemory_HASH, args);
-                if (!NT_SUCCESS(status)) {
-                    /* todo error */
-                }
+                NTSTATUS status = NtFreeVirtualMemory(NtCurrentProcess(), &base, &regionSize, MEM_RELEASE);
+                if (!NT_SUCCESS(status)) { /* todo error */ }
             }
             break;
         }
@@ -219,16 +190,9 @@ void HeapDestroy(void) {
     while (seg) {
         HeapSegment *next = seg->next;
         SIZE_T regionSize = seg->size;
-        ULONGLONG args[4];
         void *base = seg;
-        args[0] = (ULONGLONG)NtCurrentProcess();
-        args[1] = (ULONGLONG)&base;
-        args[2] = (ULONGLONG)&regionSize;
-        args[3] = MEM_RELEASE;
-        NTSTATUS status = CallSyscall(NtFreeVirtualMemory_HASH, args);
-        if (!NT_SUCCESS(status)) {
-            /* todo error */
-        }
+        NTSTATUS status = NtFreeVirtualMemory(NtCurrentProcess(), &base, &regionSize, MEM_RELEASE);
+        if (!NT_SUCCESS(status)) { /* todo error */ }
         seg = next;
     }
     heap_segments = NULL;

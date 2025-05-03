@@ -19,6 +19,9 @@ PVOID FindExportByHash(PLDR_DATA_TABLE_ENTRY module, unsigned long long target_h
 int ExtractSyscallFromNativeStub(PVOID function);
 
 int ResolveSyscallTable(PLDR_DATA_TABLE_ENTRY ntdll);
+#ifdef GUI_APP
+int ResolveGUISyscallTable();
+#endif
 
 #ifdef __cplusplus
 }

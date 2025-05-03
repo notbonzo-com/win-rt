@@ -204,19 +204,8 @@ static void internal_write(DBGIO_STREAM stream, const char *buffer, size_t lengt
         fileHandle = NtCurrentPeb()->ProcessParameters->StandardOutput;
     else if (stream == DBGIO_STREAM_STDERR)
         fileHandle = NtCurrentPeb()->ProcessParameters->StandardError;
-    unsigned long long args[9] = {
-        (unsigned long long)fileHandle,
-        0ULL, 0ULL, 0ULL,
-        (unsigned long long)&iosb,
-        (unsigned long long)buffer,
-        (unsigned long long)length,
-        0ULL,
-        0ULL
-    };
-    NTSTATUS status = CallSyscall(NtWriteFile_HASH, args);
-    if (!NT_SUCCESS(status)) {
-        
-    }
+    NTSTATUS status = NtWriteFile(fileHandle, nullptr, nullptr, nullptr, &iosb, (PVOID)buffer, length, nullptr, nullptr);
+    if (!NT_SUCCESS(status)) { }
 }
 
 void dbgio_write(DBGIO_STREAM stream, const char *buffer, size_t len)

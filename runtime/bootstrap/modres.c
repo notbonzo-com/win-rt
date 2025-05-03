@@ -2,9 +2,11 @@
 #include <bootstrap/bytepattern.h>
 #include <bootstrap/syscalltable.h>
 #include <hash/ntdll.h>
+#include <hash/util.h>
 #include <windows.h>
 #include <winifnc.h>
 #include <stdarg.h>
+#include <dbgio.h>
 
 PLDR_DATA_TABLE_ENTRY FindInMemoryModuleByHash(unsigned long long target_hash) {
     PPEB pPeb = NtCurrentPeb();
@@ -120,7 +122,33 @@ int ResolveSyscallTable(PLDR_DATA_TABLE_ENTRY ntdll) {
         NtGetContextThread_HASH,
         NtSetContextThread_HASH,
         NtResumeThread_HASH,
-        NtSuspendThread_HASH
+        NtSuspendThread_HASH,
+        NtMapViewOfSection_HASH,
+        NtUnmapViewOfSection_HASH,
+        NtCreateSection_HASH,
+        NtQueryObject_HASH,
+        NtDuplicateObject_HASH,
+        NtOpenProcessTokenEx_HASH,
+        NtOpenThreadTokenEx_HASH,
+        NtAdjustPrivilegesToken_HASH,
+        NtSetInformationToken_HASH,
+        NtCreateKey_HASH,
+        NtOpenKey_HASH,
+        NtDeleteKey_HASH,
+        NtSetValueKey_HASH,
+        NtQueryValueKey_HASH,
+        NtEnumerateKey_HASH,
+        NtEnumerateValueKey_HASH,
+        NtCreateDirectoryObject_HASH,
+        NtOpenDirectoryObject_HASH,
+        NtQueryDirectoryObject_HASH,
+        NtCreateSymbolicLinkObject_HAS,
+        NtOpenSymbolicLinkObject_HAS,
+        NtCreateEvent_HASH,
+        NtSetEvent_HASH,
+        NtClearEvent_HASH,
+        NtWaitForSingleObject_HASH,
+        NtQueryInformationToken_HASH
     };
 
     for (int i = 0; i < sizeof(g_SyscallHashList) / sizeof(g_SyscallHashList[0]); ++i) {
@@ -141,21 +169,7 @@ int ResolveSyscallTable(PLDR_DATA_TABLE_ENTRY ntdll) {
         if (g_SyscallCount >= SYSCALL_TABLE_MAX)
             return -3;
     }
-
+    
     return 0;
 }
 
-extern int nt_syscall(uint32_t syscall_number, ULONGLONG *args, int arg_count);
-
-int CallSyscallEx(ULONGLONG hash, ULONGLONG *args, int count)
-{
-    int syscall_number = -1;
-    for (int i = 0; i < g_SyscallCount; ++i) {
-        if (g_SyscallTable[i].hash == hash)
-            syscall_number = g_SyscallTable[i].syscall_number;
-    }
-    if (syscall_number < 0) 
-        return -1;
-
-    return nt_syscall((uint32_t)syscall_number, args, count);
-}
